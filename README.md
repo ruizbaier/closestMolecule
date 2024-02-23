@@ -11,7 +11,7 @@ Initial condition would look like this
 
 # Mesh generation
 
-We could generate a geometry and triangular mesh in GMSH, save it into msh format (2, ascii) and then convert it to FEniCS format xml with dolfin-convert. However the curved boundary (at $r_1 = F(r_2)$) is difficult to do (in GMSH it seems that one only has available Bezier, splines, etc).
+We could generate a geometry and triangular mesh in GMSH, save it into msh format (2, ascii) and then convert it to FEniCS format xml with dolfin-convert. However the curved boundary ( at $r\_1 = F(r\_2)$ ) is difficult to do (in GMSH it seems that one only has available Bezier, splines, etc).
 
 So we generate the geometry and the triangular mesh using FreeFem++. Check [this file](https://github.com/ruizbaier/closestMolecule/meshes/meshWithExpReal.edp). It is run with 
 
@@ -38,11 +38,11 @@ This generates also a file containing the boundary tag information
 
 We simply use $\mathbb{P}\_1$ elements (piecewise linear and overall continuous) to approximate the solution. Essential (Dirichlet) boundary conditions are imposed in the trial space
 
-$$V_h := \{ w\_h \in H\^1(\Omega): w_h|\_K \in \mathbb{P}\_1(K)\ \forall K\in \mathcal{T}_h, \quad w_h|\_{\Gamma^{\mathrm{top}}} = u_0, \ w_h|\_{\Gamma^{\mathrm{bot}}} = 0,\ w_h|\_{\Gamma^{\mathrm{right}}} = 0\},$$
+$$V_h :=  \\{w\_h \in H\^1(\Omega): w_h|\_K \in \mathbb{P}\_1(K)\ \forall K\in \mathcal{T}_h, \quad w_h|\_{\Gamma^{\mathrm{top}}} = u_0, \ w_h|\_{\Gamma^{\mathrm{bot}}} = 0,\ w_h|\_{\Gamma^{\mathrm{right}}} = 0  \\}, $$
 
 and the test space $V_h^0$ is the homogeneous counterpart of $V_h$:
 
-$$V^0_h : = \{ w\_h \in H\^1(\Omega): w_h|\_K \in \mathbb{P}\_1(K)\ \forall K\in \mathcal{T}_h, \quad w_h|\_{\Gamma^{\mathrm{top}}} = 0, \ w_h|\_{\Gamma^{\mathrm{bot}}} = 0,\ w_h|\_{\Gamma^{\mathrm{right}}} = 0\}.$$
+$$V^0_h : = \\{ w\_h \in H\^1(\Omega): w_h|\_K \in \mathbb{P}\_1(K)\ \forall K\in \mathcal{T}_h, \quad w_h|\_{\Gamma^{\mathrm{top}}} = 0, \ w_h|\_{\Gamma^{\mathrm{bot}}} = 0,\ w_h|\_{\Gamma^{\mathrm{right}}} = 0\\}.$$
 
 
 We use backward Euler's method for the time discretisation. The fully discrete form reads: find $u_h\in V\_h$ such that 
