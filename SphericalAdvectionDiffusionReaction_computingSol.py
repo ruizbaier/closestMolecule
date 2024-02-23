@@ -68,6 +68,10 @@ f = Constant(0.)
 # probability. Let's simply approximate it by a constant. We can do this with an approximation but at the moment I've not been able to construct one for the actual integral. Only one for the line integral (of any nonlinear function!) but between two points. This is not what we want
 
 density = Constant(1.)
+
+def G(u):
+    return D2*4*pi*r2**2*u**2/density
+
 # inserting a made-up nonlinear function 
 
 t = 0.; dt = 0.1; tfinal = 20.;
@@ -108,14 +112,12 @@ bcU = [bcUbot,bcUright,bcuTop]
 lhs = (u-uold)/dt*v*dx + (D2*Dx(u,0)*Dx(v,0) + D1*Dx(u,1)*Dx(v,1))*dx \
     - D2*2./r2*Dx(u,0)*v*dx \
     - D1*2./r1*Dx(u,1)*v*dx \
-    + D2*dot(4*pi*r2**2*u**2/density*r2vec,grad(v))*dx \
-    - D2*2./r2*4*pi*r2**2*u**2/density*v*dx
+    + dot(G(u)*r2vec,grad(v))*dx \
+    - 2./r2*G(u)*v*dx
 
 # the second-last term comes from integration by parts of the first contribution to the r2-divergence operator. Then we are implicitly assuming that the total flux vanishes on left (this is why it does not appear in the weak formulation)
 
-
 rhs  = f*v*dx 
-
 FF = lhs - rhs
     
 Tang = derivative(FF,u,du)
