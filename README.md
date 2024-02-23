@@ -63,9 +63,9 @@ $$V^0_h : = \\{ w\_h \in H\^1(\Omega): w_h|\_K \in \mathbb{P}\_1(K)\ \forall K\i
 
 We use backward Euler's method for the time discretisation. The fully discrete form reads: find $u_h\in V\_h$ such that 
 
-$$\int\_{\Omega} \frac{u\_h -u\_h\^n}{\Delta t} v_h + \int\_{\Omega} \mathbf{D} \nabla u_h \cdot \nabla v_h - 2\int\_{\Omega}(\frac{D\_2}{r\_2}\partial\_{r\_2}u_h +\frac{D\_1}{r\_1}\partial\_{r\_1}u_h)v_h + \int_{\Omega} G(u_h)\hat{\boldsymbol{r}}\_2 \cdot \nabla v_h - \int_{\Omega}\frac{2}{r_2} G(u_h) v_h, \qquad \forall v_h \in V^0_h;$$
+$$\int\_{\Omega} \frac{u\_h -u\_h\^n}{\Delta t} v_h + \int\_{\Omega} \mathbf{D} \nabla u_h \cdot \nabla v_h - 2\int\_{\Omega}(\frac{D\_2}{r\_2}\partial\_{r\_2}u_h +\frac{D\_1}{r\_1}\partial\_{r\_1}u_h)v_h + \int_{\Omega} G(u_h)\hat{\boldsymbol{r}}\_2 \cdot \nabla v_h - \int_{\Omega}\frac{2}{r_2} G(u_h) v_h \quad \forall v_h \in V^0_h;$$
 
-where we are taking also the approximation $G(u_h) \approx D_2 4\pi r_2^2u_h^2$.
+where we are taking also the approximation $G(u_h) \approx D_2 4\pi r_2^2u_h^2$ (implying a constant probability density). 
 
 Check [this code](https://github.com/ruizbaier/closestMolecule/SphericalAdvectionDiffusionReaction_computingSols.py). It is run with 
 
