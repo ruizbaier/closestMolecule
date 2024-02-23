@@ -18,3 +18,7 @@ The problem is then that the physical entities are lost. So we use another scrip
 # Finite element discretisation
 
 We simply use P1 elements (piecewise linear and overall continuous) to approximate the solution. We use backward Euler's method for the time discretisation. 
+
+# Verification of convergence
+
+These tests use the method of manufactured solutions to check the rate of convergence of the schemes (how the error decays with the meshsize). Check SphericalAdvectionDiffusionReaction_convergence.py. 
