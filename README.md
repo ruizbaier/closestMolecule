@@ -29,13 +29,13 @@ The initial condition is $u(0) = u_0$, and it would look like this
 
 We could generate a geometry and triangular mesh in GMSH, save it into msh format (2, ascii) and then convert it to FEniCS format xml with dolfin-convert. However the curved boundary ( at $r\_1 = F(r\_2)$ ) is difficult to do (in GMSH it seems that one only has available Bezier, splines, etc).
 
-So we generate the geometry and the triangular mesh using FreeFem++. Check [this file](https://github.com/ruizbaier/closestMolecule/meshes/meshWithExpReal.edp). It is run with 
+So we generate the geometry and the triangular mesh using FreeFem++. Check [this file](https://github.com/ruizbaier/closestMolecule/blob/main/meshes/meshWithExpReal.edp). It is run with 
 
 ```
 > FreeFem++ meshWithExpReal.edp
 ```
 
-It seems that saving directly to msh format does not work well. Therefore this script saves it automatically to mesh format. The problem is then that the physical entities are lost. So we use another script, [see here](https://github.com/ruizbaier/closestMolecule/meshes/changingEleToPhys.py). This generates the correct .msh mesh. We run it with 
+It seems that saving directly to msh format does not work well. Therefore this script saves it automatically to mesh format. The problem is then that the physical entities are lost. So we use another script, [see here](https://github.com/ruizbaier/closestMolecule/blob/main/meshes/changingEleToPhys.py). This generates the correct .msh mesh. We run it with 
 
 ```
 > python3 changingEleToPhys.py
@@ -67,7 +67,7 @@ $$\int\_{\Omega} \frac{u\_h -u\_h\^n}{\Delta t} v_h + \int\_{\Omega} \mathbf{D} 
 
 where we are taking also the approximation $G(u_h) \approx D_2 4\pi r_2^2u_h^2$ (implying a constant probability density). 
 
-Check [this code](https://github.com/ruizbaier/closestMolecule/SphericalAdvectionDiffusionReaction_computingSols.py). It is run with 
+Check [this code](https://github.com/ruizbaier/closestMolecule/blob/main/SphericalAdvectionDiffusionReaction_computingSols.py). It is run with 
 
 ```
 > python3 SphericalAdvectionDiffusionReaction_computingSols.py
@@ -75,7 +75,7 @@ Check [this code](https://github.com/ruizbaier/closestMolecule/SphericalAdvectio
 
 # Verification of convergence
 
-These tests use the method of manufactured solutions to check the rate of convergence of the schemes (how the error decays with the meshsize). Check [this code](https://github.com/ruizbaier/closestMolecule/convergence/SphericalAdvectionDiffusionReaction_convergence.py). It gives as output a table with the error history: 
+These tests use the method of manufactured solutions to check the rate of convergence of the schemes (how the error decays with the meshsize). Check [this code](https://github.com/ruizbaier/closestMolecule/blob/main/convergence/SphericalAdvectionDiffusionReaction_convergence.py). It gives as output a table with the error history: 
 
 ```
 =================================================
