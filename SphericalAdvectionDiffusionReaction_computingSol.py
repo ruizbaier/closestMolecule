@@ -75,8 +75,8 @@ t = 0.; dt = 0.1; tfinal = 20.;
 
 deg=1;
 
-mesh = Mesh("meshWithExpRealNewScalingConverted.xml")
-bdry = MeshFunction("size_t", mesh, "meshWithExpRealNewScalingConverted_facet_region.xml");
+mesh = Mesh("meshes/meshWithExpRealNewScalingConverted.xml")
+bdry = MeshFunction("size_t", mesh, "meshes/meshWithExpRealNewScalingConverted_facet_region.xml");
 r2, r1 = SpatialCoordinate(mesh)
 
 # mesh labels
