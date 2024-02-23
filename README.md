@@ -2,10 +2,26 @@
 Finite element methods for a nonlinear advecion-diffusion problem in radial/spherical coordinates. The implementation relies on the [FEniCS](https://fenicsproject.org) finite element libraries (tested with v.2019.1). Visualisation is done with [Paraview](https://paraview.org). For the mesh generation and manipulation we use the [FreeFem++](https://freefem.org) finite element library and the library [GMSH](https://gmsh.info)
 
 # Problem definition 
-Insert here brief description of the PDE 
-...
+Insert here brief description of the context leading to the PDE
 
-Initial condition would look like this 
+...
+We seek $u(r_2,r_1,t)$ such that 
+
+$$ \partial_t u - \mathrm{div}\bigl(\mathbf{D} \nabla u \bigr) - 2\biggl(\frac{D\_2}{r\_2}\partial\_{r\_2}u +\frac{D\_1}{r\_1}\partial\_{r\_1}u\biggr) - \mathrm{div}\bigl( G(u) \hat{\boldsymbol{r}}\_2 \bigr) - \frac{2}{r_2} G(u) = 0 \qquad \text{in} \ \Omega\times[0,t_{\mathrm{end}}),$$
+
+with 
+
+$$\mathbf{D} = \begin{pmatrix} D_2 & 0 \\
+0 & D_1 \end{pmatrix}, \quad \hat{\boldsymbol{r}}\_2 = \begin{pmatrix} 1\\
+0 \end{pmatrix},  \quad \text{and} \quad  G(u) := \dfrac{D_2 4\pi r_2^2u^2}{\int_{r_2}^\infty 4\pi r'^2u(r',r_1,t)\,dr'}.$$
+
+The boundary conditions are 
+
+$$ u = u_0 := \frac{c}{V}\exp\biggl(-\frac{4\pi cr_2^3}{3}\biggr) \quad \text{on}\quad \Gamma^{\mathrm{top}}, \qquad u = 0 \quad \text{on}\quad  \Gamma^{\mathrm{right}} \cup \Gamma^{\mathrm{bottom}}, \qquad 
+(\mathbf{D}\nabla u +  G(u) \hat{\boldsymbol{r}}\_2)\cdot \boldsymbol{n} = 0 \quad \text{on} \quad \Gamma^{\mathrm{left}}.$$
+
+
+The initial condition is $u(0) = u_0$, and it would look like this 
 <img width="835" alt="Screenshot 2024-02-23 at 17 14 18" src="https://github.com/ruizbaier/closestMolecule/assets/29896148/02a93131-cc3e-49bf-a420-93f0c49a957d">
 
 
@@ -47,13 +63,9 @@ $$V^0_h : = \\{ w\_h \in H\^1(\Omega): w_h|\_K \in \mathbb{P}\_1(K)\ \forall K\i
 
 We use backward Euler's method for the time discretisation. The fully discrete form reads: find $u_h\in V\_h$ such that 
 
-$$\int\_{\Omega} \frac{u\_h -u\_h\^n}{\Delta t} v_h + \int\_{\Omega} 
-\begin{pmatrix} D_2 & 0 \\
-0 & D_1 \end{pmatrix} 
-\nabla u_h \cdot \nabla v_h - 2\int\_{\Omega}(\frac{D\_2}{r\_2}\partial\_{r\_2}u_h +\frac{D\_1}{r\_1}\partial\_{r\_1}u_h)v_h + \int_{\Omega} G(u_h)\begin{pmatrix} 1\\
-0 \end{pmatrix} \cdot \nabla v_h - \int_{\Omega}\frac{2}{r_2} G(u_h) v_h, \qquad \forall v_h \in V^0_h;$$
+$$\int\_{\Omega} \frac{u\_h -u\_h\^n}{\Delta t} v_h + \int\_{\Omega} \mathbf{D} \nabla u_h \cdot \nabla v_h - 2\int\_{\Omega}(\frac{D\_2}{r\_2}\partial\_{r\_2}u_h +\frac{D\_1}{r\_1}\partial\_{r\_1}u_h)v_h + \int_{\Omega} G(u_h)\hat{\boldsymbol{r}}\_2 \cdot \nabla v_h - \int_{\Omega}\frac{2}{r_2} G(u_h) v_h, \qquad \forall v_h \in V^0_h;$$
 
-where $G(u_h):= \frac{4\pi r_2^2u_h^2}{\int_{r_2}^\infty 4\pi r'^2u_h(r_1,r',t)\,dr'}\approx 4\pi r_2^2u_h^2$.
+where we are taking also the approximation $G(u_h) \approx D_2 4\pi r_2^2u_h^2$.
 
 Check [this code](https://github.com/ruizbaier/closestMolecule/SphericalAdvectionDiffusionReaction_computingSols.py). It is run with 
 
