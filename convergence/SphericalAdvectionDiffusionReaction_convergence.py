@@ -11,8 +11,6 @@ ______  ^
 
 '''
 
-
-
 from fenics import *
 parameters["form_compiler"]["representation"] = "uflacs"
 parameters["form_compiler"]["cpp_optimize"] = True
@@ -35,6 +33,9 @@ def div_r2r1(vec):
 
 def Lap_r2r1(u):
     return div_r2r1(grad(u))
+
+def G(u):
+    return D2*4*pi*r2**2*u**2/density
 
 # ******* Exact solutions and forcing terms for error analysis ****** #
 
@@ -91,14 +92,13 @@ for nk in range(nkmax):
     lhs = u*v*dx + (D2*Dx(u,0)*Dx(v,0) + D1*Dx(u,1)*Dx(v,1))*dx \
         - D2*2./r2*Dx(u,0)*v*dx \
         - D1*2./r1*Dx(u,1)*v*dx \
-        + D2*dot(4*pi*r2**2*u**2/density*r2vec,grad(v))*dx \
-        - D2*2./r2*4*pi*r2**2*u**2/density*v*dx
+        + dot(G(u)*r2vec,grad(v))*dx \
+        - 2./r2*G(u)*v*dx
         
     rhs  = f_ex*v*dx 
 
     FF = lhs - rhs
 
-    '''
     Tang = derivative(FF,u,du)
     problem = NonlinearVariationalProblem(FF, u, J=Tang, bcs = bcU)
     solver  = NonlinearVariationalSolver(problem)
@@ -108,8 +108,8 @@ for nk in range(nkmax):
     solver.parameters['newton_solver']['relative_tolerance'] = 1e-7
 
     solver.solve()
-    '''
-    solve(FF==0, u, bcs=bcU)
+    
+    # OR: solve(FF==0, u, bcs=bcU)
     u_h = u
     
     # ********* Computing errors ****** #
