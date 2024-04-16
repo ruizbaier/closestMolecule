@@ -13,7 +13,7 @@ with
 
 $$\mathbf{D} = \begin{pmatrix} D_2 & 0 \\
 0 & D_1 \end{pmatrix}, \quad \hat{\boldsymbol{r}}\_2 = \begin{pmatrix} 1\\
-0 \end{pmatrix},  \quad \text{and} \quad  G(u) := \dfrac{D_2 4\pi r_2^2u^2}{\int_{r_2}^\infty 4\pi r'^2u(r',r_1,t)\,dr'}.$$
+0 \end{pmatrix},  \quad \text{and} \quad  G(u) := \dfrac{D_2 4\pi r_2^2u^2}{\int_{r_2}^\infty 4\pi r'^2u(r',r_1,t)dr'}.$$
 
 The boundary conditions are 
 
