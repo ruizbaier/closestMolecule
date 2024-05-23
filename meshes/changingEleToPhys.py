@@ -1,6 +1,6 @@
 import gmsh
 gmsh.initialize()
-gmsh.merge("meshWithExpRealNewScaling.mesh") # or gmsh.open
+gmsh.merge("flatBoundary.mesh") # or gmsh.open
 
 for i in range(1,4):
     E = gmsh.model.getEntities(i)
@@ -12,7 +12,7 @@ for i in range(1,4):
 #        gmsh.save("meshWithExpReal2.msh")
 
 gmsh.option.setNumber("Mesh.MshFileVersion",2.2) 
-gmsh.write("meshWithExpRealNewScalingConverted.msh")
+gmsh.write("flatBoundary.msh")
 
 # doing stuff
 
