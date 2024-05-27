@@ -43,26 +43,21 @@ parameters["form_compiler"]["cpp_optimize"] = True
 parameters["form_compiler"]["quadrature_degree"] = 4
 
 
-
-
-
-#def density(c):
-#    return exp(-pow(r2,2))*sin(pi*r1)*exp(-pow(c,2))
 cVals = [1]
 finalFluxes = []
 finalR1Fluxes = []
 finalR2Fluxes = []
 for c in cVals:
 
-    fileSol = XDMFFile("outputs/ComputingSols_t0_c"+str(c)+".xdmf")
+    fileSol = XDMFFile("outputs/expSolRefined_c"+str(c)+".xdmf")
     fileSol.parameters["functions_share_mesh"] = True
     fileSol.parameters["flush_output"] = True
 
-    fileApprox = XDMFFile("outputs/ComputingSols_Approxt0_c"+str(c)+".xdmf")
+    fileApprox = XDMFFile("outputs/expSolRefined_Approx_c"+str(c)+".xdmf")
     fileApprox.parameters["functions_share_mesh"] = True
     fileApprox.parameters["flush_output"] = True
 
-    fileFlux = XDMFFile("outputs/r1Flux_c_"+str(c)+".xdmf")
+    fileFlux = XDMFFile("outputs/expR1FluxRefined_c_"+str(c)+".xdmf")
     fileFlux.parameters["functions_share_mesh"] = True
     fileFlux.parameters["flush_output"] = True
 
@@ -70,7 +65,7 @@ for c in cVals:
     # ******* Model constants ****** #
 
     V = Constant(1.)
-    sigma = Constant(0.1)
+    sigma = Constant(0.05)
     gamma = Constant(1.0)
 
 
@@ -84,13 +79,13 @@ for c in cVals:
 
     # inserting a made-up nonlinear function
 
-    t = 0.; dt = 0.005; tfinal = 0.015;
+    t = 0.; dt = 0.002; tfinal = 0.006;
 
 
-    deg=1;
+    deg=2;
 
-    mesh = Mesh("meshes/flatBoundary.xml")
-    bdry = MeshFunction("size_t", mesh, "meshes/flatBoundary_facet_region.xml");
+    mesh = Mesh("meshes/expBoundary.xml")
+    bdry = MeshFunction("size_t", mesh, "meshes/expBoundary_facet_region.xml");
     r2, r1 = SpatialCoordinate(mesh)
 
     # mesh labels
@@ -116,33 +111,41 @@ for c in cVals:
 
     # Initial condition
     oldSoln = Function(Vh)
-    u_0 = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1])",'(1/(4*pi*x[1]*V))*exp(-4/3*pi*pow(x[0],3)*c)*(x[1]-o)'), degree = 2, c=c, V=V, o = sigma, domain = mesh)
-    #Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1]*exp(-4/3*pi*g*pow(x[0],3)))",'(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(exp(4/3*pi*pow(x[0],3)*g)*x[1]*(c+g)-c*o)'), degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
+    # Flat boundary
+    #u_0 = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1])",'(1/(4*pi*x[1]*V))*exp(-4/3*pi*pow(x[0],3)*c)*(x[1]-o)'), degree = 2, c=c, V=V, o = sigma, domain = mesh)
+    # Exp boundary
+    u_0 = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1]*exp(-4/3*pi*g*pow(x[0],3)))",'(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(exp(4/3*pi*pow(x[0],3)*g)*x[1]*(c+g)-c*o)'), degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
     oldSoln = interpolate(u_0, Vh)
     pOld, qOld = oldSoln.split()
 
     # Conditions on p
-    pRight = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1])",degree = 2, c=c, V=V, o = sigma, domain = mesh)
-    pTop = Expression('c/V*exp(-4/3*pi*c*pow(x[0],3))', degree = 2, c=c, V=V, domain = mesh)
+    # Flat boundary
+    #pRight = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1])",degree = 2, c=c, V=V, o = sigma, domain = mesh)
+    # exp boundary
+    pRight = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o*exp(-4/3*pi*g*pow(x[0],3))/x[1])",degree = 2, c=c, V=V, o = sigma,g = gamma, domain = mesh)
+    pTop = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o*exp(-4/3*pi*g*pow(x[0],3))/x[1])",degree = 2, c=c, V=V, o = sigma,g = gamma, domain = mesh)
     bcPUbot = DirichletBC(Vh.sub(0), Constant(0.), bdry, bottom)
     bcPUright = DirichletBC(Vh.sub(0), pRight, bdry, right)
     bcuPTop = DirichletBC(Vh.sub(0), pRight, bdry, top)
 
     # Conditions on q
-    qRight = Expression('(1/(4*pi*x[1]*V))*exp(-4/3*pi*pow(x[0],3)*c)*(x[1]-o)',degree = 2, c=c, V=V, o = sigma, domain = mesh)
-    qTop = Expression('c/(4*pi*V)*exp(-4/3*pi*c*pow(x[0],3))', degree = 2, c=c, V=V, domain = mesh)
+    # Flat boundary
+    # qRight = Expression('(1/(4*pi*x[1]*V))*exp(-4/3*pi*pow(x[0],3)*c)*(x[1]-o)',degree = 2, c=c, V=V, o = sigma, domain = mesh)
+    # exp boundary
+    qRight = Expression('(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(x[1]*(c+g)*exp(4/3*pi*pow(x[0],3)*g)-c*o)',degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
+    qTop = Expression('(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(x[1]*(c+g)*exp(4/3*pi*pow(x[0],3)*g)-c*o)',degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
     bcQUright = DirichletBC(Vh.sub(1), qRight, bdry, right)
     bcuQTop = DirichletBC(Vh.sub(1), qRight, bdry, top)
 
     bcU = [bcPUbot,bcPUright,bcuPTop,bcQUright,bcuQTop]
 
-    # The initial condition tto compare to the solution
-    uApproxF = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-(o/x[1]))",'c/(4*pi*V)*exp(-4/3*pi*c*pow(x[0],3))'),degree = 2, c=c, V=V, o = sigma, domain = mesh)#
+    # The initial condition to compare to the solution
+    uApproxF = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1]*exp(-4/3*pi*g*pow(x[0],3)))",'c/(4*pi*V)*exp(-4/3*pi*c*pow(x[0],3))'),degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)#
     uApprox = interpolate(uApproxF,Vh)
     pApprox, qApprox = uApprox.split()
 
-    fluxApproxF = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(o/(pow(x[1],2)))",degree = 2, c=c, V=V, o = sigma, domain = mesh)
-    fluxApprox = interpolate(fluxApproxF,gradSpace)
+    #fluxApproxF = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(o/(pow(x[1],2)))",degree = 2, c=c, V=V, o = sigma, domain = mesh)
+    #fluxApprox = interpolate(fluxApproxF,gradSpace)
     # ******** Defines expression to compute the nonlocal term ********* #
 
     class Nonlocal(UserExpression):
@@ -194,6 +197,8 @@ for c in cVals:
     solver.parameters['newton_solver']['relative_tolerance'] = 1e-7
     solver.parameters['newton_solver']['maximum_iterations'] = 100
 
+    # The boundary condition
+    boundaryFunc = Expression('o*exp(-4/3*pi*g*pow(x[0],3))', degree = 2, o = sigma, g= gamma, domain = mesh)
     # Normal to the surface
     n = FacetNormal(mesh)
     totalFluxes = []
@@ -206,9 +211,9 @@ for c in cVals:
         # Save the actual solution
         p_h.rename("p","p")
         fileSol.write(p_h,t)
-        totalFlux = assemble(4*pi*sigma**2*D1*4*pi*(r2**2)*dot(grad(p_h), n)*ds(24,subdomain_data=bdry))
-        r1Flux = assemble(4*pi*sigma**2*D1*4*pi*(r2**2)*dot(grad(p_h), r1vec)*ds(24,subdomain_data=bdry))
-        r2Flux = assemble(4*pi*sigma**2*D1*4*pi*(r2**2)*dot(grad(p_h), r2vec)*ds(24,subdomain_data=bdry))
+        totalFlux = assemble(4*pi*(boundaryFunc**2)*4*pi*(r2**2)*dot(grad(p_h), n)*ds(24,subdomain_data=bdry))
+        r1Flux = assemble(4*pi*(boundaryFunc**2)*4*pi*(r2**2)*dot(grad(p_h), r1vec)*ds(24,subdomain_data=bdry))
+        r2Flux = assemble(4*pi*(boundaryFunc**2)*4*pi*(r2**2)*dot(grad(p_h), r2vec)*ds(24,subdomain_data=bdry))
         totalFluxes.append(totalFlux)
         r1Fluxes.append(r1Flux)
         r2Fluxes.append(r2Flux)
@@ -222,19 +227,12 @@ for c in cVals:
         fileApprox.write(difp,t)
         # Write the flux to a file as well
         r1FluxSol = project(Dx(p_h,1),gradSpace)
-        r1FluxSol.vector()[:] =  (r1FluxSol.vector()-fluxApprox.vector())
-        #r1FluxSol = r1FluxSol.sub(0)
+        #r1FluxSol.vector()[:] =  (r1FluxSol.vector()-fluxApprox.vector())
         r1FluxSol.rename("r1FluxSol","r1_flux")
         fileFlux.write(r1FluxSol,t)
         # Update the solution for next iteration
         oldSoln.assign(u)
         t += dt
-        # Compute error
-        #values_u_h = u_h.compute_vertex_values(mesh)
-        #values_uApprox = uApproxF.compute_vertex_values(mesh)
-        #error_max = np.max(np.abs(values_u_h - values_uApprox))
-        #print("max error=%.3f"%error_max)
-    #print('Flux at each time step: ' +str(totalFluxes))
     finalFluxes.append(totalFluxes[-1])
     finalR1Fluxes.append(r1Fluxes[-1])
     finalR2Fluxes.append(r2Fluxes[-1])
