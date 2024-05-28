@@ -10,12 +10,12 @@ border b2(t=infx,0.){x=t;y=infy;label=top;};
 border b3(t=infy,sigma){x=0;y=t;label=left;};
 border b4(t=0,infx){x=t;y=sigma*exp(-4./3.*pi*gamma*t^3);label=bottom;};
 
-int nps = 75;
+int nps = 50;
 mesh Th=buildmesh(b1(nps)+b2(2*nps)+b3(nps)+b4(2*nps));
 
 //plot(Th);
 
-Th = adaptmesh(Th,region,iso=1,hmax=0.008, hmin=0.007,keepbackvertices=0,nbsmooth=110,nbvx=100000);
+Th = adaptmesh(Th,region,iso=1,hmax=0.01, hmin=0.011,keepbackvertices=0,nbsmooth=110,nbvx=100000);
 
 savemesh(Th,"expBoundary.mesh");
 

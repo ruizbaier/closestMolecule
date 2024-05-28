@@ -1,37 +1,10 @@
 '''
-Particle movement is radial so each one depends only on r_i. 
-
-The laplacian *is not* spherical laplacian (need to call it something else). The divergence in the radial coordinate r2 is well defined. 
-
-what is the r1/r2 gradient? usual gradient
-
-$$$$$ 
-
-it seems no need for Jacobian: the eq in r2-r1 is already posed in those coordinates
-
-
-$$$$$$$$
-
-convergence seems to depend on balance between diffusion and reaction (I've put a smaller D)
-
  - r2 ->
 
 ______  ^
 |     | |
 |     | r1
 |_____| |
-
-
-- 1/r^2 d_r(r^2 d_r u) = - 1/r^2 * (2r * d_r(u) + r^2*d_rr(u)) = - [2/r*d_r(u) + d_rr(u)]
-
-                             ibp
--[d_r(u)*(v*2/r) + d_rr(u)*v] =  u*d_r(2v/r)  + d_r(u)*d_r(v)
-                              =  2/r*u*d_r(v) - 2/r^2*u*v + d_r(u)*d_r(v)
-
-or with ibp only on lap:
-
--[d_r(u)*(v*2/r) + d_rr(u)*v] = -d_r(u)*(v*2/r)  + d_r(u)*d_r(v)
-                              =  -2/r*d_r(u)*v + d_r(u)*d_r(v) 
 
 '''
 
@@ -69,27 +42,30 @@ for c in cVals:
     gamma = Constant(1.0)
 
 
-    D2 = Constant(0.01)
-    D1 = Constant(0.01)
+    D2 = Constant(0.001)
+    D1 = Constant(0.001)
 
     r2vec = Constant((1,0))
     r1vec = Constant((0,1))
 
     f = Constant(0.)
 
-    # inserting a made-up nonlinear function
+    t = 0.
+    dt = 0.01
+    tfinal = 0.01
 
-    t = 0.; dt = 0.002; tfinal = 0.006;
 
-
-    deg=2;
+    deg=2
 
     mesh = Mesh("meshes/expBoundary.xml")
-    bdry = MeshFunction("size_t", mesh, "meshes/expBoundary_facet_region.xml");
+    bdry = MeshFunction("size_t", mesh, "meshes/expBoundary_facet_region.xml")
     r2, r1 = SpatialCoordinate(mesh)
 
     # mesh labels
-    right = 21; top=22; left = 23; bottom = 24;
+    right = 21
+    top=22
+    left = 23
+    bottom = 24
 
     # ********* Finite dimensional spaces ********* #
     P1 = FiniteElement('CG', triangle, deg)
@@ -144,10 +120,7 @@ for c in cVals:
     uApprox = interpolate(uApproxF,Vh)
     pApprox, qApprox = uApprox.split()
 
-    #fluxApproxF = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(o/(pow(x[1],2)))",degree = 2, c=c, V=V, o = sigma, domain = mesh)
-    #fluxApprox = interpolate(fluxApproxF,gradSpace)
-    # ******** Defines expression to compute the nonlocal term ********* #
-
+    # ***** Defines nonlinear term ***** #
     class Nonlocal(UserExpression):
         def __init__(self,u,**kwargs):
             super().__init__(**kwargs)
@@ -163,15 +136,15 @@ for c in cVals:
             except:
                 value[0] = 0
 
-
-    # ***** Defines nonlinear term ***** #
-    # r2^2 is only needed here since we have factored the other r2^2 into the decomposition below
     def G(u):
-        return Nonlocal(u)#(D2*r2**2*p**2)
-
+        return Nonlocal(u)
 
 
     # ********* Weak forms ********* #
+
+    # Normal to the surface
+    n = FacetNormal(mesh)
+
     lhs = (p-pOld)/dt*v1*dx + (D2*Dx(p,0)*Dx(v1,0) + D1*Dx(p,1)*Dx(v1,1))*dx \
         - D2*2./r2*Dx(p,0)*v1*dx \
         - D1*2./r1*Dx(p,1)*v1*dx \
@@ -181,7 +154,7 @@ for c in cVals:
         - D1*2./r1*Dx(q,1)*v2*dx \
         + D2*2./r2*Dx(q,0)*v2*dx \
         + r2**2*G(u)*v2*dx\
-        - Dx(q,1)*v2*ds(24)
+        - dot(Dx(q,1)*v2*r1vec,n)*ds(bottom)
 
     # Last term is from the boundary condition for q which states dq/dr2 = 0 on the inner boundary.
 
@@ -199,8 +172,6 @@ for c in cVals:
 
     # The boundary condition
     boundaryFunc = Expression('o*exp(-4/3*pi*g*pow(x[0],3))', degree = 2, o = sigma, g= gamma, domain = mesh)
-    # Normal to the surface
-    n = FacetNormal(mesh)
     totalFluxes = []
     r1Fluxes = []
     r2Fluxes = []
@@ -241,7 +212,3 @@ print('C vals: ' +str(cVals))
 print('Total fluxes: ' +str(finalFluxes))
 print('R1 fluxes: ' +str(finalR1Fluxes))
 print('R2 fluxes: ' +str(finalR2Fluxes))
-
-
-
-    
