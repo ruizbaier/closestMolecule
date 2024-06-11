@@ -11,6 +11,8 @@ ______  ^
 
 import numpy as np
 from fenics import *
+import contextlib
+
 parameters["form_compiler"]["representation"] = "uflacs"
 parameters["form_compiler"]["cpp_optimize"] = True
 parameters["form_compiler"]["quadrature_degree"] = 4
@@ -130,10 +132,10 @@ for c in cVals:
 
 
         def eval_cell(self,value,x,cell):
-            try:
+            if self.q(Point(x[0],x[1])) != 0:
                 res = (D2*x[0]**2*(self.p(Point(x[0],x[1])))**2)/self.q(Point(x[0],x[1]))
                 value[0] = res
-            except:
+            else:
                 value[0] = 0
 
     def G(u):
@@ -170,6 +172,7 @@ for c in cVals:
     solver.parameters['newton_solver']['relative_tolerance'] = 1e-7
     solver.parameters['newton_solver']['maximum_iterations'] = 100
 
+
     # The boundary condition
     boundaryFunc = Expression('o*exp(-4/3*pi*g*pow(x[0],3))', degree = 2, o = sigma, g= gamma, domain = mesh)
     totalFluxes = []
@@ -177,7 +180,8 @@ for c in cVals:
     r2Fluxes = []
     while (t <=tfinal):
         print("t=%.3f" % t)
-        solver.solve()
+        with contextlib.redirect_stdout(None):
+            solver.solve()
         p_h,q_h = u.split()
         # Save the actual solution
         p_h.rename("p","p")
