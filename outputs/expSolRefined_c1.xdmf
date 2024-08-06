@@ -15,18 +15,6 @@
           <DataItem Dimensions="8043 1" Format="HDF">expSolRefined_c1.h5:/VisualisationVector/0</DataItem>
         </Attribute>
       </Grid>
-      <Grid Name="mesh" GridType="Uniform">
-        <Topology NumberOfElements="15689" TopologyType="Triangle" NodesPerElement="3">
-          <DataItem Dimensions="15689 3" NumberType="UInt" Format="HDF">expSolRefined_c1.h5:/Mesh/1/mesh/topology</DataItem>
-        </Topology>
-        <Geometry GeometryType="XY">
-          <DataItem Dimensions="8043 2" Format="HDF">expSolRefined_c1.h5:/Mesh/1/mesh/geometry</DataItem>
-        </Geometry>
-        <Time Value="1.000000000000000e-02" />
-        <Attribute Name="p" AttributeType="Scalar" Center="Node">
-          <DataItem Dimensions="8043 1" Format="HDF">expSolRefined_c1.h5:/VisualisationVector/1</DataItem>
-        </Attribute>
-      </Grid>
     </Grid>
   </Domain>
 </Xdmf>

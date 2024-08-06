@@ -19,22 +19,19 @@ parameters["form_compiler"]["quadrature_degree"] = 4
 
 
 cVals = [1]
-finalFluxes = []
-finalR1Fluxes = []
-finalR2Fluxes = []
 for c in cVals:
 
-    fileSol = XDMFFile("outputs/expSolRefined_c"+str(c)+".xdmf")
+    fileSol = XDMFFile("outputs/expSolMixed_c"+str(c)+".xdmf")
     fileSol.parameters["functions_share_mesh"] = True
     fileSol.parameters["flush_output"] = True
 
-    fileApprox = XDMFFile("outputs/expSolRefined_Approx_c"+str(c)+".xdmf")
-    fileApprox.parameters["functions_share_mesh"] = True
-    fileApprox.parameters["flush_output"] = True
-
-    fileFlux = XDMFFile("outputs/expR1FluxRefined_c_"+str(c)+".xdmf")
+    fileFlux = XDMFFile("outputs/expFluxMixed_c"+str(c)+".xdmf")
     fileFlux.parameters["functions_share_mesh"] = True
     fileFlux.parameters["flush_output"] = True
+
+    fileApprox = XDMFFile("outputs/expSolMixed_Approx_c"+str(c)+".xdmf")
+    fileApprox.parameters["functions_share_mesh"] = True
+    fileApprox.parameters["flush_output"] = True
 
 
     # ******* Model constants ****** #
@@ -65,36 +62,44 @@ for c in cVals:
 
     # mesh labels
     right = 21
-    top=22
+    top = 22
     left = 23
     bottom = 24
 
     # ********* Finite dimensional spaces ********* #
     P1 = FiniteElement('CG', triangle, deg)
-    # Need mixed element as the product space of our two functions
-    element = MixedElement([P1, P1])
-    Vh = FunctionSpace(mesh, element)
-    gradSpace=FunctionSpace(mesh, 'CG', deg)
+    # This is the space for P and Q
+    Vh = FunctionSpace(mesh, P1)
+    # The space for grad P
+    gradSpace = FunctionSpace(mesh, 'CG', deg-1)
+    # Space for the solutions (we have P, grad P and Q)
+    # TODO: The fenics tutorials suggest defining the mixed space like this but it doesn't work for me so this line likely needs fixing.
+    mixedSpace = Vh*gradSpace*Vh
 
     # ********* test and trial functions ****** #
     # A test function for each equation
-    v1, v2 = TestFunction(Vh)
-    u = Function(Vh)
-    # Access the components of the trial function
-    p, q = split(u)
-    du = TrialFunction(Vh)
-
-    # ********* initial and boundary conditions (Essential) ******** #
+    v1, tau, v2 = TestFunctions(mixedSpace)
+    # Solution for each equation
+    u = Function(mixedSpace)
+    du = TrialFunction(mixedSpace)
+    p, s, q = u.split()
 
 
-    # Initial condition
-    oldSoln = Function(Vh)
+
+    # ********* initial and boundary conditions ******** #
+
+
+    # Initial condition (oldSoln will be updated each time step)
+    oldSoln = Function(mixedSpace)
     # Flat boundary
     #u_0 = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1])",'(1/(4*pi*x[1]*V))*exp(-4/3*pi*pow(x[0],3)*c)*(x[1]-o)'), degree = 2, c=c, V=V, o = sigma, domain = mesh)
     # Exp boundary
-    u_0 = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1]*exp(-4/3*pi*g*pow(x[0],3)))",'(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(exp(4/3*pi*pow(x[0],3)*g)*x[1]*(c+g)-c*o)'), degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
-    oldSoln = interpolate(u_0, Vh)
-    pOld, qOld = oldSoln.split()
+    initFunc = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1]*exp(-4/3*pi*g*pow(x[0],3)))","0","(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(exp(4/3*pi*pow(x[0],3)*g)*x[1]*(c+g)-c*o)"), degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
+    # Has to be done this way as interpolate doesn't allow subspaces as an argument
+    oldSoln = interpolate(initFunc, mixedSpace)
+    pOld, grad0, qOld = oldSoln.split()
+
+
 
     # Conditions on p
     # Flat boundary
@@ -102,9 +107,9 @@ for c in cVals:
     # exp boundary
     pRight = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o*exp(-4/3*pi*g*pow(x[0],3))/x[1])",degree = 2, c=c, V=V, o = sigma,g = gamma, domain = mesh)
     pTop = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o*exp(-4/3*pi*g*pow(x[0],3))/x[1])",degree = 2, c=c, V=V, o = sigma,g = gamma, domain = mesh)
-    bcPUbot = DirichletBC(Vh.sub(0), Constant(0.), bdry, bottom)
-    bcPUright = DirichletBC(Vh.sub(0), pRight, bdry, right)
-    bcuPTop = DirichletBC(Vh.sub(0), pRight, bdry, top)
+    bcPUbot = DirichletBC(mixedSpace.sub(0), Constant(0.), bdry, bottom)
+    bcPUright = DirichletBC(mixedSpace.sub(0), pRight, bdry, right)
+    bcuPTop = DirichletBC(mixedSpace.sub(0), pRight, bdry, top)
 
     # Conditions on q
     # Flat boundary
@@ -112,22 +117,25 @@ for c in cVals:
     # exp boundary
     qRight = Expression('(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(x[1]*(c+g)*exp(4/3*pi*pow(x[0],3)*g)-c*o)',degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
     qTop = Expression('(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(x[1]*(c+g)*exp(4/3*pi*pow(x[0],3)*g)-c*o)',degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
-    bcQUright = DirichletBC(Vh.sub(1), qRight, bdry, right)
-    bcuQTop = DirichletBC(Vh.sub(1), qRight, bdry, top)
+    bcQUright = DirichletBC(mixedSpace.sub(2), qRight, bdry, right)
+    bcuQTop = DirichletBC(mixedSpace.sub(2), qRight, bdry, top)
 
     bcU = [bcPUbot,bcPUright,bcuPTop,bcQUright,bcuQTop]
 
-    # The initial condition to compare to the solution
-    uApproxF = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1]*exp(-4/3*pi*g*pow(x[0],3)))",'c/(4*pi*V)*exp(-4/3*pi*c*pow(x[0],3))'),degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)#
-    uApprox = interpolate(uApproxF,Vh)
-    pApprox, qApprox = uApprox.split()
+    #TODO Boundary conditions for s (grad P)???
+
+
+    # The (approximate) steady-state solutions used for comparison
+    uApproxF = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1]*exp(-4/3*pi*g*pow(x[0],3)))","0","c/(4*pi*V)*exp(-4/3*pi*c*pow(x[0],3))"),degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)#
+    uApprox = interpolate(uApproxF,mixedSpace)
+    pApprox, gradApprox, qApprox = uApprox.split()
 
     # ***** Defines nonlinear term ***** #
     class Nonlocal(UserExpression):
         def __init__(self,u,**kwargs):
             super().__init__(**kwargs)
             print(p)
-            self.p,self.q = u.split()
+            self.p, self.grad ,self.q = u.split()
 
 
 
@@ -144,19 +152,23 @@ for c in cVals:
 
     # ********* Weak forms ********* #
 
+    # TODO check these are correct. Note I'm not sure how to implement the boundary term on the 3rd line of the weak form (Eq24 in write up)
     # Normal to the surface
     n = FacetNormal(mesh)
+    # Matrix for diffusion coefficients (think they'll need to be backwards since r2 is the first coordinate)
+    dMatrix = as_matrix([[D2,0],[0,D1]])
 
-    lhs = (p-pOld)/dt*v1*dx + (D2*Dx(p,0)*Dx(v1,0) + D1*Dx(p,1)*Dx(v1,1))*dx \
-        - D2*2./r2*Dx(p,0)*v1*dx \
-        - D1*2./r1*Dx(p,1)*v1*dx \
-        + dot(G(u)*r2vec,grad(v1))*dx \
-        - (2./r2)*G(u)*v1*dx\
-        + (q-qOld)/dt*v2*dx + (D2*Dx(q,0)*Dx(v2,0) + D1*Dx(q,1)*Dx(v2,1))*dx \
-        - D1*2./r1*Dx(q,1)*v2*dx \
-        + D2*2./r2*Dx(q,0)*v2*dx \
-        + r2**2*G(u)*v2*dx\
-        - dot(Dx(q,1)*v2*r1vec,n)*ds(bottom)
+    # Note the gradient for the radial coordinates looks just like cartesian, but the divergence does not so we
+    # cannot just use div(.) here. Also we need to include Jacobian of (4pi*r1*r2)**2 in each integration over the
+    # domain, since the mesh is just 2D but our space is actually 6D.
+
+    lhs = (p-pOld)/dt*v1*(4*np.pi*r1*r2)**2*dx + (Dx(s.sub(0),0) + Dx(s.sub(1),1) + 2.*s.sub(0)/r2 + 2.*s.sub(1)/r1)*v1*(4*np.pi*r1*r2)**2*dx\
+        + dot((s + D2*G(u)*r2vec),tau) - p*(D2*Dx(tau.sub(0),0) + D1*Dx(tau.sub(1),1) + 2.*D2*tau.sub(0)/r2 + 2.*D1*tau.sub(1)/r1)*(4*np.pi*r1*r2)**2*dx\
+        + p*dot(dMatrix*tau,n)*ds\
+        + (q-qOld)/dt*v2*(4*np.pi*r1*r2)**2*dx + (D2*Dx(q,0)*Dx(v2,0) + D1*Dx(q,1)*Dx(v2,1))*(4*np.pi*r1*r2)**2*dx \
+        + D2*4./r2*Dx(q,0)*(4*np.pi*r1*r2)**2*dx\
+        + r2**2*G(u)*v2*(4*np.pi*r1*r2)**2*dx\
+        - dot(D1*Dx(q,1)*v2*r1vec,n)*(4*np.pi*r1*r2)**2*ds(bottom)
 
     # Last term is from the boundary condition for q which states dq/dr2 = 0 on the inner boundary.
 
@@ -173,46 +185,24 @@ for c in cVals:
     solver.parameters['newton_solver']['maximum_iterations'] = 100
 
 
-    # The boundary condition
-    boundaryFunc = Expression('o*exp(-4/3*pi*g*pow(x[0],3))', degree = 2, o = sigma, g= gamma, domain = mesh)
-    totalFluxes = []
-    r1Fluxes = []
-    r2Fluxes = []
     while (t <=tfinal):
         print("t=%.3f" % t)
         with contextlib.redirect_stdout(None):
             solver.solve()
-        p_h,q_h = u.split()
+        p_h,s_h,q_h = u.split()
         # Save the actual solution
         p_h.rename("p","p")
         fileSol.write(p_h,t)
-        totalFlux = assemble(4*pi*(boundaryFunc**2)*4*pi*(r2**2)*dot(grad(p_h), n)*ds(24,subdomain_data=bdry))
-        r1Flux = assemble(4*pi*(boundaryFunc**2)*4*pi*(r2**2)*dot(grad(p_h), r1vec)*ds(24,subdomain_data=bdry))
-        r2Flux = assemble(4*pi*(boundaryFunc**2)*4*pi*(r2**2)*dot(grad(p_h), r2vec)*ds(24,subdomain_data=bdry))
-        totalFluxes.append(totalFlux)
-        r1Fluxes.append(r1Flux)
-        r2Fluxes.append(r2Flux)
-        print('Flux over boundary is: ' +str(totalFlux) + ' r1 flux: ' +str(r1Flux) + ' r2 flux: ' +str(r2Flux))
+        # Save the flux
+        p_h.rename("s","s")
+        fileFlux.write(s_h,t)
         # Save the differences between the approx and the actual solution
-        dif = Function(Vh)
-        difp, difq = dif.split()
+        dif = Function(mixedSpace)
+        difp, difs, difq = dif.split()
         difp.vector()[:] = (p_h.vector()-pApprox.vector())#/p_h.vector()
         # Need to rename for correct plotting later
         difp.rename("dif","dif")
         fileApprox.write(difp,t)
-        # Write the flux to a file as well
-        r1FluxSol = project(Dx(p_h,1),gradSpace)
-        #r1FluxSol.vector()[:] =  (r1FluxSol.vector()-fluxApprox.vector())
-        r1FluxSol.rename("r1FluxSol","r1_flux")
-        fileFlux.write(r1FluxSol,t)
         # Update the solution for next iteration
         oldSoln.assign(u)
         t += dt
-    finalFluxes.append(totalFluxes[-1])
-    finalR1Fluxes.append(r1Fluxes[-1])
-    finalR2Fluxes.append(r2Fluxes[-1])
-    # Print the difference between
-print('C vals: ' +str(cVals))
-print('Total fluxes: ' +str(finalFluxes))
-print('R1 fluxes: ' +str(finalR1Fluxes))
-print('R2 fluxes: ' +str(finalR2Fluxes))
