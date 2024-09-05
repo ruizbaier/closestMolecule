@@ -20,19 +20,18 @@ r2, r1 = SpatialCoordinate(mesh)
 right = 21; top = 22; left = 23; bottom = 24
 
 # ******* Model constants ****** #
-
-c = Constant(1.) 
-V = Constant(1.)
+c = Constant(1.0)
+V = Constant(1.0)
 sigma = Constant(0.05)
 gamma = Constant(1.0)
-D2 = Constant(0.01)
-D1 = Constant(0.01)
+D1 = 2*Constant(0.01)
+D2 = 3/2*Constant(0.01)
 r2_vec = Constant((1, 0))
 r1_vec = Constant((0, 1))
 f = Constant(0.)
 
 # ********** Time constants ********* #
-t = 0.; dt = 0.01; tfinal = 0.01
+t = 0.; dt = 0.01; tfinal = 0.1
 
 
 
@@ -51,34 +50,36 @@ du = TrialFunction(mixed_space)
 p, s, q = split(u)
 
 # ********* initial and boundary conditions ******** #
-p_initial = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = 2, c=c, V=V, o = sigma, domain = mesh)
+p_initial = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
 
-q_initial = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))", degree = 2, c=c, V=V, o = sigma, domain = mesh)
+q_initial = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
 
 p_old = interpolate(p_initial, mixed_space.sub(0).collapse())
 q_old = interpolate(q_initial, mixed_space.sub(2).collapse())
     
-p_right = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = 2, c=c, V=V, o = sigma, domain = mesh)
-p_top = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = 2, c=c, V=V, o = sigma, domain = mesh)
+p_right = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
+p_top = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
 p_bottom = Constant(0.)
     
 # as the formulation for p-fluxp is mixed, the boundary condition for p becomes natural and the boundary condition for the flux becomes essential (dirichlet) 
 
 # the formulation for q is primal, so the Dirichlet conditions remain so
-q_right = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))", degree = 2, c=c, V=V, o = sigma, domain = mesh)
-q_top = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))", degree = 2, c=c, V=V, o = sigma, domain = mesh)
+q_right = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
+q_top = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
+q_left = Constant(1/(4*pi))
 q_right_boundary_condition = DirichletBC(mixed_space.sub(2), q_right, bdry, right)
 q_top_boundary_condition = DirichletBC(mixed_space.sub(2), q_top, bdry, top)
+q_left_boundary_condition = DirichletBC(mixed_space.sub(2), q_left, bdry, left)
 
 #Boundary conditions for s are complementary to those of p:
 s_left_boundary_condition = DirichletBC(mixed_space.sub(1), Constant((0, 0)), bdry, left)
 
 # here we only list the Dirichlet ones 
-bc = [s_left_boundary_condition, q_right_boundary_condition, q_top_boundary_condition]
+bc = [s_left_boundary_condition, q_right_boundary_condition,q_left_boundary_condition, q_top_boundary_condition]
 
     
 # (approximate) steady-state solutions used for comparison
-p_steady_state = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1])", degree = 2, c=c, V=V, o = sigma, domain = mesh)
+p_steady_state = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
 
 p_approx = interpolate(p_steady_state, mixed_space.sub(0).collapse())
 

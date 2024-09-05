@@ -18,191 +18,127 @@ parameters["form_compiler"]["cpp_optimize"] = True
 parameters["form_compiler"]["quadrature_degree"] = 4
 
 
-cVals = [1]
-for c in cVals:
-
-    fileSol = XDMFFile("outputs/expSolMixed_c"+str(c)+".xdmf")
-    fileSol.parameters["functions_share_mesh"] = True
-    fileSol.parameters["flush_output"] = True
-
-    fileFlux = XDMFFile("outputs/expFluxMixed_c"+str(c)+".xdmf")
-    fileFlux.parameters["functions_share_mesh"] = True
-    fileFlux.parameters["flush_output"] = True
-
-    fileApprox = XDMFFile("outputs/expSolMixed_Approx_c"+str(c)+".xdmf")
-    fileApprox.parameters["functions_share_mesh"] = True
-    fileApprox.parameters["flush_output"] = True
 
 
-    # ******* Model constants ****** #
-
-    V = Constant(1.)
-    sigma = Constant(0.05)
-    gamma = Constant(1.0)
-
-
-    D2 = Constant(0.001)
-    D1 = Constant(0.001)
-
-    r2vec = Constant((1,0))
-    r1vec = Constant((0,1))
-
-    f = Constant(0.)
-
-    t = 0.
-    dt = 0.01
-    tfinal = 0.01
+# output file
+output_file = XDMFFile("outputs/flat_solutions_coupled.xdmf")
+output_file.parameters['rewrite_function_mesh']=False
+output_file.parameters["flush_output"] = True
+output_file.parameters["functions_share_mesh"] = True
 
 
-    deg=2
+# mesh construction
+mesh = Mesh("meshes/flat_boundary.xml")
+bdry = MeshFunction("size_t", mesh, "meshes/flat_boundary_facet_region.xml")
+r2, r1 = SpatialCoordinate(mesh)
 
-    mesh = Mesh("meshes/expBoundary.xml")
-    bdry = MeshFunction("size_t", mesh, "meshes/expBoundary_facet_region.xml")
-    r2, r1 = SpatialCoordinate(mesh)
+# mesh labels
+right = 21; top = 22; left = 23; bottom = 24
 
-    # mesh labels
-    right = 21
-    top = 22
-    left = 23
-    bottom = 24
+# ******* Model constants ****** #
+c = Constant(1.0)
+V = Constant(1.0)
+sigma = Constant(0.05)
+gamma = Constant(1.0)
+D1 = 2*Constant(0.01)
+D2 = 3/2*Constant(0.01)
+r2_vec = Constant((1, 0))
+r1_vec = Constant((0, 1))
+f = Constant(0.)
 
-    # ********* Finite dimensional spaces ********* #
-    P1 = FiniteElement('CG', triangle, deg)
-    # This is the space for P and Q
-    Vh = FunctionSpace(mesh, P1)
-    # The space for grad P
-    gradSpace = FunctionSpace(mesh, 'CG', deg-1)
-    # Space for the solutions (we have P, grad P and Q)
-    # TODO: The fenics tutorials suggest defining the mixed space like this but it doesn't work for me so this line likely needs fixing.
-    mixedSpace = Vh*gradSpace*Vh
+# ********** Time constants ********* #
+t = 0.; dt = 0.01; tfinal = 1.0
 
-    # ********* test and trial functions ****** #
-    # A test function for each equation
-    v1, tau, v2 = TestFunctions(mixedSpace)
-    # Solution for each equation
-    u = Function(mixedSpace)
-    du = TrialFunction(mixedSpace)
-    p, s, q = u.split()
+# ********* Finite dimensional spaces ********* #
+deg=1
+P0 = FiniteElement('CG',mesh.ufl_cell(),deg)
+P1 = FiniteElement('CG', mesh.ufl_cell(), deg)
+mixed_space = FunctionSpace(mesh, MixedElement([P0, P1]))
 
+# ********* test and trial functions ****** #
+v1, v2 = TestFunctions(mixed_space)
+u = Function(mixed_space)
+du = TrialFunction(mixed_space)
+p, q = split(u)
 
+# ********* initial and boundary conditions ******** #
+p_initial = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
+q_initial = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
 
-    # ********* initial and boundary conditions ******** #
+p_old = interpolate(p_initial, mixed_space.sub(0).collapse())
+q_old = interpolate(q_initial, mixed_space.sub(1).collapse())
 
+# the formulation for p is primal, so the Dirichlet conditions remain so
+p_right = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
+p_top = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
+p_bottom = Constant(0.)
 
-    # Initial condition (oldSoln will be updated each time step)
-    oldSoln = Function(mixedSpace)
-    # Flat boundary
-    #u_0 = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1])",'(1/(4*pi*x[1]*V))*exp(-4/3*pi*pow(x[0],3)*c)*(x[1]-o)'), degree = 2, c=c, V=V, o = sigma, domain = mesh)
-    # Exp boundary
-    initFunc = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1]*exp(-4/3*pi*g*pow(x[0],3)))","0","(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(exp(4/3*pi*pow(x[0],3)*g)*x[1]*(c+g)-c*o)"), degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
-    # Has to be done this way as interpolate doesn't allow subspaces as an argument
-    oldSoln = interpolate(initFunc, mixedSpace)
-    pOld, grad0, qOld = oldSoln.split()
+p_right_boundary_condition = DirichletBC(mixed_space.sub(0), p_right, bdry, right)
+p_top_boundary_condition = DirichletBC(mixed_space.sub(0), p_top, bdry, top)
+p_bottom_boundary_condition = DirichletBC(mixed_space.sub(0), p_bottom, bdry, bottom)
 
+# the formulation for q is primal, so the Dirichlet conditions remain so
+q_right = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
+q_left = Constant(1/(4*pi))
+q_top = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
 
+q_right_boundary_condition = DirichletBC(mixed_space.sub(1), q_right, bdry, right)
+q_left_boundary_condition = DirichletBC(mixed_space.sub(1), q_left, bdry, left)
+q_top_boundary_condition = DirichletBC(mixed_space.sub(1), q_top, bdry, top)
 
-    # Conditions on p
-    # Flat boundary
-    #pRight = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1])",degree = 2, c=c, V=V, o = sigma, domain = mesh)
-    # exp boundary
-    pRight = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o*exp(-4/3*pi*g*pow(x[0],3))/x[1])",degree = 2, c=c, V=V, o = sigma,g = gamma, domain = mesh)
-    pTop = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o*exp(-4/3*pi*g*pow(x[0],3))/x[1])",degree = 2, c=c, V=V, o = sigma,g = gamma, domain = mesh)
-    bcPUbot = DirichletBC(mixedSpace.sub(0), Constant(0.), bdry, bottom)
-    bcPUright = DirichletBC(mixedSpace.sub(0), pRight, bdry, right)
-    bcuPTop = DirichletBC(mixedSpace.sub(0), pRight, bdry, top)
+bc = [p_right_boundary_condition,p_top_boundary_condition,p_bottom_boundary_condition,q_right_boundary_condition,
+      q_left_boundary_condition,q_top_boundary_condition]
 
-    # Conditions on q
-    # Flat boundary
-    # qRight = Expression('(1/(4*pi*x[1]*V))*exp(-4/3*pi*pow(x[0],3)*c)*(x[1]-o)',degree = 2, c=c, V=V, o = sigma, domain = mesh)
-    # exp boundary
-    qRight = Expression('(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(x[1]*(c+g)*exp(4/3*pi*pow(x[0],3)*g)-c*o)',degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
-    qTop = Expression('(1/(4*pi*x[1]*V*(c+g)))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(x[1]*(c+g)*exp(4/3*pi*pow(x[0],3)*g)-c*o)',degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
-    bcQUright = DirichletBC(mixedSpace.sub(2), qRight, bdry, right)
-    bcuQTop = DirichletBC(mixedSpace.sub(2), qRight, bdry, top)
+# (approximate) steady-state solution used for comparison
+p_steady_state = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = deg, c=c, V=V, domain = mesh)
 
-    bcU = [bcPUbot,bcPUright,bcuPTop,bcQUright,bcuQTop]
+p_approx = interpolate(p_steady_state, mixed_space.sub(0).collapse())
 
-    #TODO Boundary conditions for s (grad P)???
+def Gstar(p,q):
+    return conditional(gt(q,0),r2**2*p**2/q,0)
 
+# ********* Weak forms ********* #
+n = FacetNormal(mesh)
+dMatrix = as_tensor([[D2,0],[0,D1]])
+weight = (4*pi*r1*r2)**2
 
-    # The (approximate) steady-state solutions used for comparison
-    uApproxF = Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1]*exp(-4/3*pi*g*pow(x[0],3)))","0","c/(4*pi*V)*exp(-4/3*pi*c*pow(x[0],3))"),degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)#
-    uApprox = interpolate(uApproxF,mixedSpace)
-    pApprox, gradApprox, qApprox = uApprox.split()
+FF = (p - p_old) / dt * v1 * weight * dx \
+     + dot(dMatrix*(grad(q)+Gstar(p,q)*r2_vec),grad(v1)) * weight * dx \
+     - dot(v1*(dMatrix*(grad(p)++Gstar(p,q)*r2_vec)),n)*weight*ds(left) \
+     + (q - q_old) / dt * v2 * weight * dx \
+     + dot(dMatrix*grad(q),grad(v2)) * weight * dx \
+     + (D2*4./r2) * Dx(q,0) * v2 * weight * dx \
+     + r2 ** 2* D2 * Gstar(p,q) * v2 * weight * dx \
+     - dot(D1 * Dx(q,1) * v2 * r1_vec, n) * weight * ds(bottom)
 
-    # ***** Defines nonlinear term ***** #
-    class Nonlocal(UserExpression):
-        def __init__(self,u,**kwargs):
-            super().__init__(**kwargs)
-            print(p)
-            self.p, self.grad ,self.q = u.split()
+# Last term is from the boundary condition for q which states dq/dr2 = 0 on the inner boundary.
 
-
-
-        def eval_cell(self,value,x,cell):
-            if self.q(Point(x[0],x[1])) != 0:
-                res = (D2*x[0]**2*(self.p(Point(x[0],x[1])))**2)/self.q(Point(x[0],x[1]))
-                value[0] = res
-            else:
-                value[0] = 0
-
-    def G(u):
-        return Nonlocal(u)
-
-
-    # ********* Weak forms ********* #
-
-    # TODO check these are correct. Note I'm not sure how to implement the boundary term on the 3rd line of the weak form (Eq24 in write up)
-    # Normal to the surface
-    n = FacetNormal(mesh)
-    # Matrix for diffusion coefficients (think they'll need to be backwards since r2 is the first coordinate)
-    dMatrix = as_matrix([[D2,0],[0,D1]])
-
-    # Note the gradient for the radial coordinates looks just like cartesian, but the divergence does not so we
-    # cannot just use div(.) here. Also we need to include Jacobian of (4pi*r1*r2)**2 in each integration over the
-    # domain, since the mesh is just 2D but our space is actually 6D.
-
-    lhs = (p-pOld)/dt*v1*(4*np.pi*r1*r2)**2*dx + (Dx(s.sub(0),0) + Dx(s.sub(1),1) + 2.*s.sub(0)/r2 + 2.*s.sub(1)/r1)*v1*(4*np.pi*r1*r2)**2*dx\
-        + dot((s + D2*G(u)*r2vec),tau) - p*(D2*Dx(tau.sub(0),0) + D1*Dx(tau.sub(1),1) + 2.*D2*tau.sub(0)/r2 + 2.*D1*tau.sub(1)/r1)*(4*np.pi*r1*r2)**2*dx\
-        + p*dot(dMatrix*tau,n)*ds\
-        + (q-qOld)/dt*v2*(4*np.pi*r1*r2)**2*dx + (D2*Dx(q,0)*Dx(v2,0) + D1*Dx(q,1)*Dx(v2,1))*(4*np.pi*r1*r2)**2*dx \
-        + D2*4./r2*Dx(q,0)*(4*np.pi*r1*r2)**2*dx\
-        + r2**2*G(u)*v2*(4*np.pi*r1*r2)**2*dx\
-        - dot(D1*Dx(q,1)*v2*r1vec,n)*(4*np.pi*r1*r2)**2*ds(bottom)
-
-    # Last term is from the boundary condition for q which states dq/dr2 = 0 on the inner boundary.
-
-    #rhs  = f*v*dx
-    FF = lhs
-
-    Tang = derivative(FF,u,du)
-    problem = NonlinearVariationalProblem(FF, u, J=Tang, bcs = bcU)
-    solver  = NonlinearVariationalSolver(problem)
-    solver.parameters['nonlinear_solver']                    = 'newton'
-    solver.parameters['newton_solver']['linear_solver']      = 'mumps'
-    solver.parameters['newton_solver']['absolute_tolerance'] = 1e-7
-    solver.parameters['newton_solver']['relative_tolerance'] = 1e-7
-    solver.parameters['newton_solver']['maximum_iterations'] = 100
+#rhs  = f*v*dx
+Tang = derivative(FF,u,du)
+problem = NonlinearVariationalProblem(FF, u, J=Tang, bcs = bc)
+solver  = NonlinearVariationalSolver(problem)
+solver.parameters['nonlinear_solver']                    = 'newton'
+solver.parameters['newton_solver']['linear_solver']      = 'mumps'
+solver.parameters['newton_solver']['absolute_tolerance'] = 1e-7
+solver.parameters['newton_solver']['relative_tolerance'] = 1e-7
+solver.parameters['newton_solver']['maximum_iterations'] = 15
 
 
-    while (t <=tfinal):
-        print("t=%.3f" % t)
-        with contextlib.redirect_stdout(None):
-            solver.solve()
-        p_h,s_h,q_h = u.split()
-        # Save the actual solution
-        p_h.rename("p","p")
-        fileSol.write(p_h,t)
-        # Save the flux
-        p_h.rename("s","s")
-        fileFlux.write(s_h,t)
-        # Save the differences between the approx and the actual solution
-        dif = Function(mixedSpace)
-        difp, difs, difq = dif.split()
-        difp.vector()[:] = (p_h.vector()-pApprox.vector())#/p_h.vector()
-        # Need to rename for correct plotting later
-        difp.rename("dif","dif")
-        fileApprox.write(difp,t)
-        # Update the solution for next iteration
-        oldSoln.assign(u)
-        t += dt
+while (t <=tfinal):
+    print("t=%.3f" % t)
+    solver.solve()
+    p_h,q_h = u.split()
+    # Save the actual solution
+    p_h.rename("p","p")
+    q_h.rename("q","q")
+    output_file.write(p_h, t)
+    output_file.write(q_h, t)
+
+    difp = project(p_h - p_approx, mixed_space.sub(0).collapse())
+    difp.rename("dif","dif")
+    output_file.write(difp,t)
+    # Update the solution for next iteration
+    assign(p_old, p_h)
+    assign(q_old, q_h)
+
+    t += dt

@@ -32,7 +32,7 @@ r1_vec = Constant((0, 1))
 f = Constant(0.)
 
 # ********** Time constants ********* #
-t = 0.; dt = 0.1; tfinal = 1.0
+t = 0.; dt = 0.1; tfinal = 10.0
 
 
 
@@ -58,8 +58,8 @@ q_initial = Expression("1/(4*pi*x[1]*V*(c+g))*exp(-4/3*pi*pow(x[0],3)*(c+g))*(ex
 p_old = interpolate(p_initial, mixed_space.sub(0).collapse())
 q_old = interpolate(q_initial, mixed_space.sub(2).collapse())
     
-p_right = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o*exp(-4/3*pi*g*pow(x[0],3))/x[1])", degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
-p_top = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o*exp(-4/3*pi*g*pow(x[0],3))/x[1])", degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
+p_right = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
+p_top = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))", degree = 2, c=c, V=V, o = sigma, g = gamma, domain = mesh)
 p_bottom = Constant(0.)
     
 # as the formulation for p-fluxp is mixed, the boundary condition for p becomes natural and the boundary condition for the flux becomes essential (dirichlet) 
