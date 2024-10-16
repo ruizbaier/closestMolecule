@@ -7,12 +7,13 @@ Creates a simple rectangular boundary mesh for testing.
 
 # mesh construction.
 TOL = DOLFIN_EPS
-R1_MIN = 0.1
+R1_MIN = 0.05
 R1_MAX = 0.5
 R2_MIN = 0
-R2_MAX = 2.0
-MESH_RES_R1 = 100
-MESH_RES_R2 = 200
+R2_MAX = 1.0
+MESH_BASE_RES = 1000
+MESH_RES_R1 = int(MESH_BASE_RES*(R1_MAX-R1_MIN))
+MESH_RES_R2 = int((MESH_BASE_RES/4)*(R2_MAX-R2_MIN))
 
 class boundary_L(SubDomain):
     """
@@ -50,6 +51,7 @@ sub_domains = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)
 sub_domains.set_all(0)
 
 # Mark the boundaries.
+integral = 20
 right = 21
 top = 22
 left = 23

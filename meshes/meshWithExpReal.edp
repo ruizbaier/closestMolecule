@@ -1,7 +1,7 @@
 //load "msh3"; 
 load "medit";
 
-real sigma = 0.05, infx = 1, infy = 1, gamma = 1.0, fend = sigma;//*exp(-4./3.*pi*gamma*infx^3)
+real sigma = 0.05, infx = 1, infy = 0.5, gamma = 1.0, fend = sigma;//*exp(-4./3.*pi*gamma*infx^3)
 
 int right = 21, top=22, left = 23, bottom = 24;
 
@@ -11,15 +11,15 @@ border b3(t=infy,sigma){x=0;y=t;label=left;};
 border b4(t=0,infx){x=t;y=sigma;label=bottom;};
 //exp(-4./3.*pi*gamma*t^3)
 
-int nps = 50;
+int nps = 150;
 mesh Th=buildmesh(b1(nps)+b2(2*nps)+b3(nps)+b4(2*nps));
 
 //plot(Th);
 
-Th = adaptmesh(Th,region,iso=1,hmax=0.01, hmin=0.011,keepbackvertices=0,nbsmooth=110,nbvx=100000);
+Th = adaptmesh(Th,region,iso=1,hmax=0.004, hmin=0.002,keepbackvertices=0,nbsmooth=110,nbvx=150000);
 
 savemesh(Th,"flat_boundary.mesh");
 
 
-plot(Th);
+//plot(Th);
 

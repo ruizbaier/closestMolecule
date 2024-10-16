@@ -23,10 +23,10 @@ output_file.parameters["functions_share_mesh"] = True
 
 
 # ******* Model constants ****** #
-c = 0.5
+c = 1.0
 V = 1.0
 sigma = 0.05
-D_BASE = 0.01
+D_BASE = 1
 D1 = 2*D_BASE
 D2 = 1.5*D_BASE
 r2_vec = Constant((1, 0))
@@ -35,8 +35,8 @@ f = Constant(0.)
 
 # ********** Time constants ********* #
 t = 0.
-dt = 0.005
-tfinal = 0.01
+dt = 0.001
+tfinal = 0.005
 
 # mesh construction
 mesh = Mesh("meshes/rect_boundary.xml")
@@ -95,7 +95,7 @@ p_steady_state = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1])", degree=
 p_approx = interpolate(p_steady_state, mixed_space.sub(0).collapse())
 
 def Gstar(p,q):
-    return conditional(gt(q, DOLFIN_EPS), r2**2*p**2/q, 0)
+    return conditional(gt((p**2)/q, 10**-12), (r2**2*p**2)/q, 0)
 
 # ********* Weak forms ********* #
 n = FacetNormal(mesh)
@@ -115,8 +115,8 @@ solver = NonlinearVariationalSolver(problem)
 solver_type = 'newton'
 solver.parameters['nonlinear_solver'] = solver_type
 solver.parameters[solver_type + '_solver']['linear_solver'] = 'mumps'
-solver.parameters[solver_type + '_solver']['absolute_tolerance'] = 1e-9
-solver.parameters[solver_type + '_solver']['relative_tolerance'] = 1e-9
+solver.parameters[solver_type + '_solver']['absolute_tolerance'] = 1e-7
+solver.parameters[solver_type + '_solver']['relative_tolerance'] = 1e-7
 solver.parameters[solver_type + '_solver']['maximum_iterations'] = 5
 
 
@@ -125,7 +125,7 @@ while (t <=tfinal):
     solver.solve()
     p_h,q_h = u.split()
     # Compute flux
-    flux = project(-grad(p_h), FunctionSpace(mesh, "RT", deg))
+    flux = project(-dMatrix*grad(p_h), FunctionSpace(mesh, "RT", deg))
     # Save the actual solution
     p_h.rename("p","p")
     q_h.rename("q","q")
@@ -145,8 +145,9 @@ while (t <=tfinal):
 
 # Try to compute flux over boundary
 ds = Measure('ds', domain=mesh, subdomain_data=bdry)
-total_flux = assemble(dot(flux, n)*weight*ds(bottom))
-print(f'Total flux: {total_flux}')
+total_flux = assemble(Dx(p,1)*4*pi*r2**2*4*pi*(sigma)**2*ds(bottom))
+print(f'Total flux: {total_flux} expected flux: {4*np.pi*D1*sigma}')
+'''
 # plot slice of solution
 r2_vals = np.arange(0, 2+0.01, 0.01)
 r1_val = 0.1
@@ -169,3 +170,4 @@ ax2.plot(r2_vals, dif_slice, color='black', label='difference')
 fig.legend()
 
 plt.show()
+'''
