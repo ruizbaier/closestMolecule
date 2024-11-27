@@ -10,164 +10,315 @@ ______  ^
 import numpy as np
 from fenics import *
 import matplotlib.pyplot as plt
+from create_flat_boundary import create_mesh
 
 parameters["form_compiler"]["representation"] = "uflacs"
 parameters["form_compiler"]["cpp_optimize"] = True
 parameters["form_compiler"]["quadrature_degree"] = 4
 
-# output file
-output_file = XDMFFile("outputs/flat_solutions_coupled.xdmf")
-output_file.parameters['rewrite_function_mesh']=False
-output_file.parameters["flush_output"] = True
-output_file.parameters["functions_share_mesh"] = True
+
+def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma, results):
+    r2, r1 = SpatialCoordinate(mesh)
+    n = FacetNormal(mesh)
+    weight = (4 * pi * r1 * r2) ** 2
+    r2_vec = Constant((1, 0))
+    r1_vec = Constant((0, 1))
+    r1_matrix = as_tensor([[0, 0], [0, 1]])
+    r2_matrix = as_tensor([[1, 0], [0, 0]])
+
+    # mesh labels
+    right = 21
+    top = 22
+    left = 23
+    bottom = 24
+
+    # ********* Finite dimensional spaces ********* #
+    deg = 3
+    P0 = FiniteElement('CG', mesh.ufl_cell(), deg)
+    P1 = FiniteElement('CG', mesh.ufl_cell(), deg)
+    mixed_space = FunctionSpace(mesh, MixedElement([P0, P1]))
+    # Initialise output file
+    output_file = XDMFFile(f'outputs/exp_solution_c{concentration}_sigma{sigma}_gamma{gamma}.xdmf')
+    output_file.parameters["rewrite_function_mesh"] = False
+    output_file.parameters["flush_output"] = True
+    output_file.parameters["functions_share_mesh"] = True
+    t = 0
+    # ********* test and trial functions ****** #
+    v1, v2 = TestFunctions(mixed_space)
+    u = Function(mixed_space)
+    du = TrialFunction(mixed_space)
+    p, q = split(u)
+
+    # ********* initial and boundary conditions ******** #
+    p_initial = PInitial(concentration, sigma, gamma, degree=deg)
+    q_initial = QInitial(concentration, degree=deg)
+
+    p_old = interpolate(p_initial, mixed_space.sub(0).collapse())
+    q_old = interpolate(q_initial, mixed_space.sub(1).collapse())
+
+    # the formulation for p is primal, so the Dirichlet conditions remain so.
+    p_right = p_initial
+    p_top = p_initial
+    p_bottom = Constant(0.)
+
+    p_right_boundary_condition = DirichletBC(mixed_space.sub(0), p_right, bdry, right)
+    p_top_boundary_condition = DirichletBC(mixed_space.sub(0), p_top, bdry, top)
+    p_bottom_boundary_condition = DirichletBC(mixed_space.sub(0), p_bottom, bdry, bottom)
+
+    # the formulation for q is primal, so the Dirichlet conditions remain so
+    q_right = q_initial
+
+    q_right_boundary_condition = DirichletBC(mixed_space.sub(1), q_right, bdry, right)
+
+    bc = [p_right_boundary_condition, p_top_boundary_condition, p_bottom_boundary_condition, q_right_boundary_condition]
+
+    # (approximate) steady-state solution used for comparison
+    p_steady_state = PInitial(concentration, sigma, gamma, degree=deg)
+    p_flux_approx = FluxApprox(concentration,  sigma, gamma, D1, degree=deg)
+
+    test_space = FunctionSpace(mesh, "CG", deg)
+    p_approx = 4*np.pi*r2**2*interpolate(p_steady_state, test_space)
+    flux_approx = interpolate(p_flux_approx, test_space)
+
+    # ********* Weak forms ********* #
+    FF = (p - p_old) / dt * v1 * weight * dx \
+         + dot(dMatrix * (grad(p) + Gstar(p, q, concentration, r2) * r2_vec), grad(v1)) * weight * dx \
+         + Dx(q, 0) * v2 * weight * dx + r2 ** 2 * p * v2 * weight * dx
+
+    # Initialise solver
+    Tang = derivative(FF, u, du)
+    problem = NonlinearVariationalProblem(FF, u, J=Tang, bcs=bc)
+    solver = NonlinearVariationalSolver(problem)
+    solver_type = 'newton'
+    solver.parameters['nonlinear_solver'] = solver_type
+    solver.parameters[solver_type + '_solver']['linear_solver'] = 'mumps'
+    solver.parameters[solver_type + '_solver']['absolute_tolerance'] = 1e-10
+    solver.parameters[solver_type + '_solver']['relative_tolerance'] = 1e-10
+    solver.parameters[solver_type + '_solver']['maximum_iterations'] = 10
+
+    vector_space = VectorFunctionSpace(mesh, "DG", deg - 1)
+
+    while (t <= t_final):
+        print("t=%.3f" % t)
+        solver.solve()
+        p_h, q_h = u.split()
+        adjusted_p_h = project(4*np.pi*r2**2*p_h, test_space)
+        # Compute flux
+        flux = project(-4*np.pi*r2**2*(dMatrix * grad(p_h)), vector_space)
+        # Save the actual solution
+        adjusted_p_h.rename("p", "p")
+        q_h.rename("q", "q")
+        flux.rename("flux", "flux")
+        output_file.write(adjusted_p_h, t)
+        output_file.write(q_h, t)
+        output_file.write(flux, t)
+        # Compare solution to approximation
+        difp = project((adjusted_p_h - p_approx), test_space)
+        difp.rename("dif", "dif")
+        output_file.write(difp, t)
+        # Compare flux to approximation
+        dif_flux = project((dot(-dMatrix * grad(p_h), r1_vec) - flux_approx),test_space)
+        dif_flux.rename("dif_flux", "dif_flux")
+        output_file.write(dif_flux, t)
+        # Update the solution for next iteration
+        assign(p_old, p_h)
+        assign(q_old, q_h)
+
+        t += dt
+
+    # Try to compute flux over boundary
+    ds = Measure('ds', domain=mesh, subdomain_data=bdry)
+    total_flux = V1 * assemble(dot(flux, n) * 4 * pi * r1 ** 2 * ds(bottom))
+    total_r1_flux = V1 * assemble(dot(flux, r1_matrix * n) * 4 * pi * r1 ** 2 * ds(bottom))
+    total_r2_flux = V1 * assemble(dot(flux, r2_matrix * n) * 4 * pi * r1 ** 2 * ds(bottom))
+    total_approx_flux = D1 * V1 * assemble(Dx(p_approx, 1) * 4 * pi * r1 ** 2 * ds(bottom))
+
+    print(f'r1 flux: {total_r1_flux} r2 flux: {total_r2_flux} total flux: {total_flux} approximate flux: '
+          f'{total_approx_flux} error: {total_flux - total_approx_flux} sigma: {sigma} sigma sq: {sigma ** 2}')
+    results.append([sigma, gamma, concentration, total_r1_flux, total_r2_flux, total_flux, total_approx_flux])
 
 
-# ******* Model constants ****** #
-c = 1.0
-V = 1.0
-sigma = 0.05
-D_BASE = 1
-D1 = 2*D_BASE
-D2 = 1.5*D_BASE
-r2_vec = Constant((1, 0))
-r1_vec = Constant((0, 1))
-f = Constant(0.)
-
-# ********** Time constants ********* #
-t = 0.
-dt = 0.001
-tfinal = 0.005
-
-# mesh construction
-mesh = Mesh("meshes/rect_boundary.xml")
-bdry = MeshFunction("size_t", mesh, "meshes/rect_boundary_facet_region.xml")
-r2, r1 = SpatialCoordinate(mesh)
-
-# mesh labels
-right = 21
-top = 22
-left = 23
-bottom = 24
-
-# ********* Finite dimensional spaces ********* #
-deg = 1
-P0 = FiniteElement('CG',mesh.ufl_cell(),deg)
-P1 = FiniteElement('CG', mesh.ufl_cell(), deg)
-mixed_space = FunctionSpace(mesh, MixedElement([P0, P1]))
-
-# ********* test and trial functions ****** #
-v1, v2 = TestFunctions(mixed_space)
-u = Function(mixed_space)
-u = interpolate(Expression(("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1 - o/x[1])",
-                            "1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))*(1 - o/x[1])"), degree=deg, c=c, V=V, o=sigma,
-                           domain=mesh), mixed_space)
-du = TrialFunction(mixed_space)
-p, q = split(u)
-
-# ********* initial and boundary conditions ******** #
-p_initial = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1 - o/x[1])", degree=deg, c=c, V=V, o=sigma, domain=mesh)
-q_initial = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))*(1 - o/x[1])", degree=deg, c=c, V=V, o=sigma,
-                       domain=mesh)
-
-p_old = interpolate(p_initial, mixed_space.sub(0).collapse())
-q_old = interpolate(q_initial, mixed_space.sub(1).collapse())
-
-# the formulation for p is primal, so the Dirichlet conditions remain so.
-p_right = Expression("(c/V)*exp(-4/3*pi*c*pow(x[0],3))*(1 - o/x[1])", degree=deg, c=c, V=V, o=sigma, domain=mesh)
-p_top = Expression("(c/V)*exp(-4/3*pi*c*pow(x[0],3))*(1 - o/x[1])", degree=deg, c=c, V=V, o=sigma, domain=mesh)
-p_bottom = Constant(0.)
-
-p_right_boundary_condition = DirichletBC(mixed_space.sub(0), p_right, bdry, right)
-p_top_boundary_condition = DirichletBC(mixed_space.sub(0), p_top, bdry, top)
-p_bottom_boundary_condition = DirichletBC(mixed_space.sub(0), p_bottom, bdry, bottom)
-
-# the formulation for q is primal, so the Dirichlet conditions remain so
-q_right = Expression("1/(4*pi*V)*(1)*exp(-4/3*pi*c*pow(x[0],3))*(1 - o/x[1])", degree=deg, c=c, V=V, o=sigma,
-                     domain=mesh)
-
-q_right_boundary_condition = DirichletBC(mixed_space.sub(1), q_right, bdry, right)#DirichletBC(mixed_space.sub(1), q_right, boundary_R)#
-
-bc = [p_right_boundary_condition,p_top_boundary_condition,p_bottom_boundary_condition,q_right_boundary_condition]
-
-# (approximate) steady-state solution used for comparison
-p_steady_state = Expression("c/V*exp(-4/3*pi*c*pow(x[0],3))*(1-o/x[1])", degree=deg, o=sigma, c=c, V=V, domain=mesh)
-
-p_approx = interpolate(p_steady_state, mixed_space.sub(0).collapse())
-
-def Gstar(p,q):
-    return conditional(gt((p**2)/q, 10**-12), (r2**2*p**2)/q, 0)
-
-# ********* Weak forms ********* #
-n = FacetNormal(mesh)
-dMatrix = as_tensor([[D2, 0], [0, D1]])
-weight = (4*pi*r1*r2)**2
-
-FF = (p - p_old) / dt * v1 * weight * dx \
-     + dot(dMatrix*(grad(p)+Gstar(p,q)*r2_vec), grad(v1)) * weight * dx \
-     + Dx(q, 0)*v2*weight*dx + r2**2*p*v2*weight*dx
-
-#rhs  = f*v*dx
-#info(NonlinearVariationalSolver.default_parameters(), 1)
-#print(list_linear_solver_methods())
-Tang = derivative(FF, u, du)
-problem = NonlinearVariationalProblem(FF, u, J=Tang, bcs = bc)
-solver = NonlinearVariationalSolver(problem)
-solver_type = 'newton'
-solver.parameters['nonlinear_solver'] = solver_type
-solver.parameters[solver_type + '_solver']['linear_solver'] = 'mumps'
-solver.parameters[solver_type + '_solver']['absolute_tolerance'] = 1e-7
-solver.parameters[solver_type + '_solver']['relative_tolerance'] = 1e-7
-solver.parameters[solver_type + '_solver']['maximum_iterations'] = 5
+def exp_reaction_boundary(sigma, gamma, r2_val):
+    return sigma*np.exp(-4/3*np.pi*gamma*np.power(r2_val, 3))
 
 
-while (t <=tfinal):
-    print("t=%.3f" % t)
-    solver.solve()
-    p_h,q_h = u.split()
-    # Compute flux
-    flux = project(-dMatrix*grad(p_h), FunctionSpace(mesh, "RT", deg))
-    # Save the actual solution
-    p_h.rename("p","p")
-    q_h.rename("q","q")
-    flux.rename("flux","flux")
-    output_file.write(p_h, t)
-    output_file.write(q_h, t)
-    output_file.write(flux, t)
+def flat_reaction_boundary(r2_val):
+    return sigma
 
-    difp = project((p_h - p_approx), mixed_space.sub(0).collapse())
-    difp.rename("dif","dif")
-    output_file.write(difp,t)
-    # Update the solution for next iteration
-    assign(p_old, p_h)
-    assign(q_old, q_h)
 
-    t += dt
+def Gstar(p, q, c, r2):
+    return conditional(gt(abs(1/(4*np.pi)*p - q), 0.001), (p/q)*p*r2**2, 4*np.pi*c*p*r2**2)
 
-# Try to compute flux over boundary
-ds = Measure('ds', domain=mesh, subdomain_data=bdry)
-total_flux = assemble(Dx(p,1)*4*pi*r2**2*4*pi*(sigma)**2*ds(bottom))
-print(f'Total flux: {total_flux} expected flux: {4*np.pi*D1*sigma}')
+
+class PInitial(UserExpression):
+    def __init__(self, conc, sigma, gamma, **kwargs):
+        super().__init__(**kwargs)
+        self.conc = conc
+        self.sigma = sigma
+        self.gamma = gamma
+
+    def eval(self, values, x):
+        values[0] = self.conc/V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*(1 - exp_reaction_boundary(self.sigma,
+                                                                                                          self.gamma,
+                                                                                                          x[0])/x[1])
+
+    def value_shape(self):
+        return ()
+
+
+class QInitial(UserExpression):
+    def __init__(self, conc, **kwargs):
+        super().__init__(**kwargs)
+        self.conc = conc
+
+    def eval(self, values, x):
+        values[0] = 1/(4*np.pi*V1)*np.exp(-4/3*np.pi*self.conc*np.power(x[0], 3))
+
+    def value_shape(self):
+        return ()
+
+
+
+class FluxApprox(UserExpression):
+    def __init__(self, conc, sigma, gamma, D1, **kwargs):
+        super().__init__(**kwargs)
+        self.conc = conc
+        self.sigma = sigma
+        self.gamma = gamma
+        self.D1 = D1
+
+    def eval(self, values, x):
+        values[0] = -self.D1*self.conc/V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*(exp_reaction_boundary(self.sigma, self.gamma, x[0])/np.square(x[1]))
+
+    def value_shape(self):
+        return ()
+
+
+if __name__=='__main__':
+    output_filename = 'sigma_test'
+    mesh_filenames = ["exp_boundary_sigma0.25on8pi_gamma1", "exp_boundary_sigma0.5on8pi_gamma1",
+                      "exp_boundary_sigma0.75on8pi_gamma1", "exp_boundary_sigma1on8pi_gamma1",
+                      "exp_boundary_sigma1.25on8pi_gamma1", "exp_boundary_sigma1.5on8pi_gamma1",
+                      "exp_boundary_sigma1.75on8pi_gamma1", "exp_boundary_sigma2on8pi_gamma1"]
+
+    # ******* Model constants ****** #
+    sigmas = np.array([0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2])/(8*np.pi)#, 1, 1.25, 1.5, 1.75, 2])/(8*np.pi)
+    gammas = [1]*8
+    mesh_folder = "meshes/sigma_test/"
+    r1_max = 3
+    r2_min = 0
+    r2_max = 3
+    mesh_base_res = 250
+    R = r1_max
+    V2 = 4 * np.pi * np.power(r2_max, 3) / 3
+    Nc = V2
+    c = Nc / V2
+    D_BASE = 1
+    D1 = 2 * D_BASE
+    D2 = 1.5 * D_BASE
+    dMatrix = as_tensor([[D2, 0], [0, D1]])
+    # ********** Time constants ********* #
+    dt = 0.1
+    t_final = 0.1
+    for i in range(len(sigmas)):
+        results = []
+        mesh_filename = mesh_filenames[i]
+        sigma = sigmas[i]
+        gamma = gammas[i]
+        r1_min = sigma
+        V1 = 4 * np.pi * np.power(R - sigma, 3) / 3
+        exp_vol_int = R * (2 * R + sigma) / (2 * np.square(R - sigma))
+        # mesh construction
+        #create_mesh(r1_min, r1_max, r2_min, r2_max, mesh_base_res, mesh_filename)
+        mesh = Mesh(mesh_folder + mesh_filename + ".xml")
+        bdry = MeshFunction("size_t", mesh, mesh_folder + mesh_filename + "_facet_region.xml")
+        plot(mesh)
+
+        # Solve problem
+        solve_problem_instance(c, t_final, dt, mesh, bdry, sigma, gamma, results)
+        print(results)
+        results = np.array(results)
+        np.save(f'{output_filename}{i}.npy', results)
+    # Compile all the results
+    final_results = None
+    for i in range(len(sigmas)):
+        data = np.load(f'{output_filename}{i}.npy')
+        if final_results is None:
+            final_results = data
+        else:
+            final_results = np.concatenate([final_results, data])
+    np.save(f'{output_filename}.npy', final_results)
+    final_data = np.load(f'{output_filename}.npy')
+    print(final_data)
+
+
+
 '''
 # plot slice of solution
-r2_vals = np.arange(0, 2+0.01, 0.01)
-r1_val = 0.1
-dif_slice = np.zeros(len(r2_vals))
+r1_flux = interpolate(flux.sub(1), test_space)
+r2_flux = interpolate(flux.sub(0), test_space)
+# Want values on the boundary:
+# Find the facets that are marked with 1
+facet_indices = np.flatnonzero(bdry.array() == bottom)
+# Create facet to vertex connectivity
+mesh.init(mesh.topology().dim()-1, 0)
+# Get mesh nodes
+coords = mesh.coordinates()
+# Get facet to vertex connectivity
+f_to_c = mesh.topology()(mesh.topology().dim()-1, 0)
+positions = []
+for facet in facet_indices:
+    vertices = f_to_c(facet)
+    # first vertex only from each facet
+    positions.append(coords[vertices[0]].tolist())
+positions.sort()
+positions = np.array(positions)
+
+r1_vals = positions[:,1]
+r2_vals = positions[:,0]
+expected_slice = c/V1*np.exp(-4/3*np.pi*c*np.power(r2_vals,3))*(1-r1_vals/r1_vals)
+# Flux diverges as r1 becomes small since there is no r1 dependence to begin with so should be zero
+expected_flux = np.zeros(len(r2_vals))
+expected_flux[np.where(r1_vals > sigma/100)] = c*D1/V1*np.exp(-4/3*np.pi*c*np.power(r2_vals[np.where(r1_vals > sigma/100)],3))*(1/r1_vals[np.where(r1_vals > sigma/100)])
+
+
 # extract solution values
 actual_slice = np.zeros(len(r2_vals))
+r1_actual_flux = np.zeros(len(r2_vals))
+r2_actual_flux = np.zeros(len(r2_vals))
 for i in range(len(r2_vals)):
-    actual_slice[i] = p_h(Point(r2_vals[i], r1_val))
-    dif_slice[i] = np.abs(difp(Point(r2_vals[i], r1_val)))
+    actual_slice[i] = p_h(Point(r2_vals[i], r1_vals[i]))
+    r1_actual_flux[i] = -r1_flux(Point(r2_vals[i], r1_vals[i]))
+    r2_actual_flux[i] = -r2_flux(Point(r2_vals[i], r1_vals[i]))
+
+# Plot solutions
 fig, ax1 = plt.subplots()
 ax1.set_xlabel('r_2')
-ax1.set_ylabel(f'Solution at r_1 = {r1_val}')
+ax1.set_ylabel(f'Solution on boundary')
 ax1.plot(r2_vals, actual_slice, color='blue', label='numerical solution')
+ax1.plot(r2_vals, expected_slice, color='red', label='exact')
 
 # instantiate a second axes that shares the same x-axis
 ax2 = ax1.twinx()
-
+dif_slice = np.abs(actual_slice - expected_slice)
 ax2.set_ylabel('Difference to expected solution.')
 ax2.plot(r2_vals, dif_slice, color='black', label='difference')
 fig.legend()
+
+# Errors in flux
+fig2, flux_ax1 =  plt.subplots()
+flux_ax1.set_xlabel('r_2')
+flux_ax1.set_ylabel(f'R1 flux on boundary')
+flux_ax1.plot(r2_vals, r1_actual_flux, color='blue', label='numerical r1 flux')
+flux_ax1.plot(r2_vals, r2_actual_flux, color='blue', label='numerical r2 flux')
+flux_ax1.plot(r2_vals, expected_flux, color='red', label='exact')
+
+# instantiate a second axes that shares the same x-axis
+flux_ax2 = flux_ax1.twinx()
+dif_slice = np.abs(r1_actual_flux - expected_flux)
+flux_ax2.set_ylabel('Difference to expected flux.')
+flux_ax2.plot(r2_vals, dif_slice, color='black', label='difference')
+fig2.legend()
 
 plt.show()
 '''

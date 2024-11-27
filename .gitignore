@@ -1,5 +1,11 @@
 # exclude everything
 outputs/*
+meshes/*.xml
+meshes/*.msh
+meshes/*.mesh*
+*.npy
+meshes/*_test
+__pycache__
 
 # exception to the rule
 !outputs/.gitkeep 

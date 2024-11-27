@@ -127,7 +127,7 @@ while (t <=tfinal):
     output_file.write(q_h, t)
     output_file.write(s_h, t)
         
-    difp = project(p_h - p_approx, mixed_space.sub(0).collapse())
+    difp = project((p_h - p_approx)/p_approx, mixed_space.sub(0).collapse())
     difp.rename("dif","dif")
     output_file.write(difp,t)
     # Update the solution for next iteration

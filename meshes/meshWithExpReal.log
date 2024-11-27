@@ -4,42 +4,42 @@
     1 : //load "msh3";
     2 : load "medit"(load: loadLibary C:\Program Files (x86)\FreeFem++\\.\medit = 0);
     3 :
-    4 : real sigma = 0.05, infx = 1, infy = 0.5, gamma = 1.0, fend = sigma;//*exp(-4./3.*pi*gamma*infx^3)
+    4 : real sigma = 2/(8*pi), infx = 3, infy = 3, gamma = 1, fend = sigma*exp(-4./3.*pi*gamma*infx^3);
     5 :
     6 : int right = 21, top=22, left = 23, bottom = 24;
     7 :
     8 : border b1(t=fend,infy){x=infx;y=t;label=right;};
     9 : border b2(t=infx,0.){x=t;y=infy;label=top;};
    10 : border b3(t=infy,sigma){x=0;y=t;label=left;};
-   11 : border b4(t=0,infx){x=t;y=sigma;label=bottom;};
-   12 : //exp(-4./3.*pi*gamma*t^3)
+   11 : border b4(t=0,infx){x=t;y=sigma*exp(-4./3.*pi*gamma*t^3);label=bottom;};
+   12 :
    13 :
-   14 : int nps = 150;
+   14 : int nps = 100;
    15 : mesh Th=buildmesh(b1(nps)+b2(2*nps)+b3(nps)+b4(2*nps));
    16 :
    17 : //plot(Th);
    18 :
-   19 : Th = adaptmesh(Th,region,iso=1,hmax=0.004, hmin=0.002,keepbackvertices=0,nbsmooth=110,nbvx=150000);
+   19 : Th = adaptmesh(Th,region,iso=1,hmax=0.0'ffglut.exe' is not recognized as an internal or external command,
+operable program or batch file.
+1, hmin=0.005,keepbackvertices=0,nbsmooth=110,nbvx=150000);
    20 :
-   21 : savemesh(Th,"flat_boundary.mesh");
+   21 : savemesh(Th,"exp_boundary_sigma2on8pi_gamma1.mesh");
    22 :
    23 :
    24 : //plot(Th);
    25 :
    26 :  sizestack + 1024 =1400  ( 376 )
  
-'ffglut.exe' is not recognized as an internal or external command,
-operable program or batch file.
-  --  mesh:  Nb of Triangles =  94072, Nb of Vertices 47487
+  --  mesh:  Nb of Triangles =  52072, Nb of Vertices 26337
   number of required edges : 0
-  -- adaptmesh statistics:  Nb triangles 63943 , h  min 0.00254587 , h max 0.0058423
-     area =  0.45 , M area = 28125 , M area/( |Khat| nt) 1.01578
-     infiny-regularity:  min 0.494734  max 1.47923
-     anisomax  2.5992, beta max = 1.2647 min  0.768843
-  --  mesh:  Nb of Triangles =  63943, Nb of Vertices 32335
+  -- adaptmesh statistics:  Nb triangles 214160 , h  min 0.0059641 , h max 0.0152183
+     area =  8.95592 , M area = 89559.2 , M area/( |Khat| nt) 0.965764
+     infiny-regularity:  min 0.496929  max 1.52287
+     anisomax  2.46978, beta max = 1.29351 min  0.758743
+  --  mesh:  Nb of Triangles = 214160, Nb of Vertices 107677
   number of required edges : 0
-times: compile 0.083s, execution 16.688s,  mpirank:0
+times: compile 0.067s, execution 60.704s,  mpirank:0
  ######## We forget of deleting   83 Nb pointer,   0Bytes  ,  mpirank 0, memory leak =0
- CodeAlloc : nb ptr  3962,  size :525088 mpirank: 0
+ CodeAlloc : nb ptr  3993,  size :525760 mpirank: 0
 Ok: Normal End
  try getConsole C:\Users\tjkea5\Desktop\phd\simulations\numerical_code\closestMolecule\meshes\meshWithExpReal.edp
