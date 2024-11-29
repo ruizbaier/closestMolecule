@@ -6,6 +6,8 @@ meshes/*.mesh*
 *.npy
 meshes/*_test
 __pycache__
+advection_diffusion_original.py
+advection_diffusion_mixed_flat.py
 
 # exception to the rule
 !outputs/.gitkeep 

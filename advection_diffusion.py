@@ -205,6 +205,7 @@ if __name__=='__main__':
     sigmas = np.array([0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2])/(8*np.pi)#, 1, 1.25, 1.5, 1.75, 2])/(8*np.pi)
     gammas = [1]*8
     mesh_folder = "meshes/sigma_test/"
+    start_point = 3
     r1_max = 3
     r2_min = 0
     r2_max = 3
@@ -220,7 +221,7 @@ if __name__=='__main__':
     # ********** Time constants ********* #
     dt = 0.1
     t_final = 0.1
-    for i in range(len(sigmas)):
+    for i in range(start_point, len(sigmas)):
         results = []
         mesh_filename = mesh_filenames[i]
         sigma = sigmas[i]
