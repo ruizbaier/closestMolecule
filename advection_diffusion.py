@@ -17,7 +17,34 @@ parameters["form_compiler"]["cpp_optimize"] = True
 parameters["form_compiler"]["quadrature_degree"] = 4
 
 
-def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma, results):
+def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma, results, steady_state = False):
+    """
+    Solves a specific instance of the problem. Writes the numerical solution to an xdmf file
+    and returns some flux calculations in the 'results' array.
+
+    Parameters
+    ----------
+    concentration: float
+        Represents the concentration of C molecules within the system.
+    t_final: float
+        Defines the period [0, t_final] over which the problem is to be solved.
+    dt: float
+        The time step for the numerical solver.
+    mesh: Mesh
+        The mesh over which the finite element is required.
+    bdry: MeshFucntion
+        The mesh function that marks the boudnaries of 'mesh'.
+    sigma: float
+        The maximum height of the bottom/reaction boundary in the mesh. We assume here the boundary is
+        ~ sigma*exp(-4*pi*gamma*r2^3/3).
+    gamma: float
+        The rate of decay for the bottom boundary in the mesh.
+    results: list[float]
+        Initially empty this list is populated with the flux computations (namely the net flux over the bottom boundary)
+        at the end of the computation.
+    steady_state: bool
+        Whether to solve the steady-state problem or not.
+    """
     r2, r1 = SpatialCoordinate(mesh)
     n = FacetNormal(mesh)
     weight = (4 * pi * r1 * r2) ** 2
@@ -32,18 +59,21 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     left = 23
     bottom = 24
 
-    # ********* Finite dimensional spaces ********* #
+    # ******** Finite dimensional spaces ******** #
     deg = 3
     P0 = FiniteElement('CG', mesh.ufl_cell(), deg)
     P1 = FiniteElement('CG', mesh.ufl_cell(), deg)
     mixed_space = FunctionSpace(mesh, MixedElement([P0, P1]))
-    # Initialise output file
+    # ******** Initialise output file ******** #
     output_file = XDMFFile(f'outputs/exp_solution_c{concentration}_sigma{sigma}_gamma{gamma}.xdmf')
     output_file.parameters["rewrite_function_mesh"] = False
     output_file.parameters["flush_output"] = True
     output_file.parameters["functions_share_mesh"] = True
+    # ******** Initialise time evolution ******** #
+    if steady_state:
+        t_final = 0
     t = 0
-    # ********* test and trial functions ****** #
+    # ********* test and trial functions ******** #
     v1, v2 = TestFunctions(mixed_space)
     u = Function(mixed_space)
     du = TrialFunction(mixed_space)
@@ -61,6 +91,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     p_top = p_initial
     p_bottom = Constant(0.)
 
+    # Boundary condition on the left is a no flux condition which is accounted for in the weak formulation.
     p_right_boundary_condition = DirichletBC(mixed_space.sub(0), p_right, bdry, right)
     p_top_boundary_condition = DirichletBC(mixed_space.sub(0), p_top, bdry, top)
     p_bottom_boundary_condition = DirichletBC(mixed_space.sub(0), p_bottom, bdry, bottom)
@@ -81,9 +112,15 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     flux_approx = interpolate(p_flux_approx, test_space)
 
     # ********* Weak forms ********* #
-    FF = (p - p_old) / dt * v1 * weight * dx \
-         + dot(dMatrix * (grad(p) + Gstar(p, q, concentration, r2) * r2_vec), grad(v1)) * weight * dx \
-         + Dx(q, 0) * v2 * weight * dx + r2 ** 2 * p * v2 * weight * dx
+    if not steady_state:
+        # Time dependent weak form.
+        FF = (p - p_old) / dt * v1 * weight * dx \
+             + dot(dMatrix * (grad(p) + Gstar(p, q, concentration, r2) * r2_vec), grad(v1)) * weight * dx \
+             + Dx(q, 0) * v2 * weight * dx + r2 ** 2 * p * v2 * weight * dx
+    else:
+        # Steady-state weak form.
+        FF = dot(dMatrix * (grad(p) + Gstar(p, q, concentration, r2) * r2_vec), grad(v1)) * weight * dx \
+             + Dx(q, 0) * v2 * weight * dx + r2 ** 2 * p * v2 * weight * dx
 
     # Initialise solver
     Tang = derivative(FF, u, du)
@@ -123,7 +160,6 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         # Update the solution for next iteration
         assign(p_old, p_h)
         assign(q_old, q_h)
-
         t += dt
 
     # Try to compute flux over boundary
@@ -147,10 +183,18 @@ def flat_reaction_boundary(r2_val):
 
 
 def Gstar(p, q, c, r2):
+    """
+    The correct non-linear term is (r2*p)^2/q but for sufficiently large r2 this limits to 4*np.pi*c*p*r2**2.
+    Using this approximation avoids the floating point errors that arise from computing (r2*p)^2/q when p and q are
+    very small.
+    """
     return conditional(gt(abs(1/(4*np.pi)*p - q), 0.001), (p/q)*p*r2**2, 4*np.pi*c*p*r2**2)
 
 
 class PInitial(UserExpression):
+    """
+    Custom expression to avoid the issues Fenics seems to have with exp().
+    """
     def __init__(self, conc, sigma, gamma, **kwargs):
         super().__init__(**kwargs)
         self.conc = conc
@@ -167,6 +211,9 @@ class PInitial(UserExpression):
 
 
 class QInitial(UserExpression):
+    """
+    Custom expression to avoid the issues Fenics seems to have with exp().
+    """
     def __init__(self, conc, **kwargs):
         super().__init__(**kwargs)
         self.conc = conc
@@ -180,6 +227,9 @@ class QInitial(UserExpression):
 
 
 class FluxApprox(UserExpression):
+    """
+    Custom expression to avoid the issues Fenics seems to have with exp().
+    """
     def __init__(self, conc, sigma, gamma, D1, **kwargs):
         super().__init__(**kwargs)
         self.conc = conc
@@ -188,32 +238,37 @@ class FluxApprox(UserExpression):
         self.D1 = D1
 
     def eval(self, values, x):
-        values[0] = -self.D1*self.conc/V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*(exp_reaction_boundary(self.sigma, self.gamma, x[0])/np.square(x[1]))
+        values[0] = -self.D1*self.conc/V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*\
+                    (exp_reaction_boundary(self.sigma, self.gamma, x[0])/np.square(x[1]))
 
     def value_shape(self):
         return ()
 
 
-if __name__=='__main__':
-    output_filename = 'sigma_test'
-    mesh_filenames = ["exp_boundary_sigma0.25on8pi_gamma1", "exp_boundary_sigma0.5on8pi_gamma1",
-                      "exp_boundary_sigma0.75on8pi_gamma1", "exp_boundary_sigma1on8pi_gamma1",
-                      "exp_boundary_sigma1.25on8pi_gamma1", "exp_boundary_sigma1.5on8pi_gamma1",
-                      "exp_boundary_sigma1.75on8pi_gamma1", "exp_boundary_sigma2on8pi_gamma1"]
+if __name__ == '__main__':
+    # The name of the output file for the flux results. Not the numerical solution, see solve_problem_instance() for
+    # that output file.
+    output_filename = 'exp_test'
+    # The meshes to solve the problem for. Represented as an array to allow scanning through multiple problem instances.
+    mesh_filenames = ["exp_boundary_sigma0.1_gamma1"]
 
     # ******* Model constants ****** #
-    sigmas = np.array([0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2])/(8*np.pi)#, 1, 1.25, 1.5, 1.75, 2])/(8*np.pi)
-    gammas = [1]*8
-    mesh_folder = "meshes/sigma_test/"
-    start_point = 3
+    # Sigma and gamma values must match the boundaries of the meshes in 'mesh_filenames'.
+    sigmas = np.array([0.1])
+    gammas = [1]
+    mesh_folder = "meshes/"
+    # Dimensions of the mesh
     r1_max = 3
     r2_min = 0
     r2_max = 3
-    mesh_base_res = 250
     R = r1_max
+    # Volume r2 direction (space is actually 6D not 2D).
     V2 = 4 * np.pi * np.power(r2_max, 3) / 3
+    # Number of C molecules.
     Nc = V2
+    # Concentration of C molecules.
     c = Nc / V2
+    # Diffusion coefficients.
     D_BASE = 1
     D1 = 2 * D_BASE
     D2 = 1.5 * D_BASE
@@ -221,105 +276,35 @@ if __name__=='__main__':
     # ********** Time constants ********* #
     dt = 0.1
     t_final = 0.1
-    for i in range(start_point, len(sigmas)):
+    # Toogle to solve steady state or time dependent problem
+    steady_state = True
+    for i in range(len(mesh_filenames)):
         results = []
         mesh_filename = mesh_filenames[i]
         sigma = sigmas[i]
         gamma = gammas[i]
         r1_min = sigma
+        # Volume in r1 direction.
         V1 = 4 * np.pi * np.power(R - sigma, 3) / 3
-        exp_vol_int = R * (2 * R + sigma) / (2 * np.square(R - sigma))
-        # mesh construction
-        #create_mesh(r1_min, r1_max, r2_min, r2_max, mesh_base_res, mesh_filename)
+        # Read in mesh.
         mesh = Mesh(mesh_folder + mesh_filename + ".xml")
         bdry = MeshFunction("size_t", mesh, mesh_folder + mesh_filename + "_facet_region.xml")
-        plot(mesh)
-
         # Solve problem
-        solve_problem_instance(c, t_final, dt, mesh, bdry, sigma, gamma, results)
+        solve_problem_instance(c, t_final, dt, mesh, bdry, sigma, gamma, results, steady_state)
         print(results)
         results = np.array(results)
-        np.save(f'{output_filename}{i}.npy', results)
-    # Compile all the results
-    final_results = None
-    for i in range(len(sigmas)):
-        data = np.load(f'{output_filename}{i}.npy')
-        if final_results is None:
-            final_results = data
+        if len(mesh_filenames) > 0:
+            np.save(f'{output_filename}{i}.npy', results)
         else:
-            final_results = np.concatenate([final_results, data])
-    np.save(f'{output_filename}.npy', final_results)
-    final_data = np.load(f'{output_filename}.npy')
-    print(final_data)
-
-
-
-'''
-# plot slice of solution
-r1_flux = interpolate(flux.sub(1), test_space)
-r2_flux = interpolate(flux.sub(0), test_space)
-# Want values on the boundary:
-# Find the facets that are marked with 1
-facet_indices = np.flatnonzero(bdry.array() == bottom)
-# Create facet to vertex connectivity
-mesh.init(mesh.topology().dim()-1, 0)
-# Get mesh nodes
-coords = mesh.coordinates()
-# Get facet to vertex connectivity
-f_to_c = mesh.topology()(mesh.topology().dim()-1, 0)
-positions = []
-for facet in facet_indices:
-    vertices = f_to_c(facet)
-    # first vertex only from each facet
-    positions.append(coords[vertices[0]].tolist())
-positions.sort()
-positions = np.array(positions)
-
-r1_vals = positions[:,1]
-r2_vals = positions[:,0]
-expected_slice = c/V1*np.exp(-4/3*np.pi*c*np.power(r2_vals,3))*(1-r1_vals/r1_vals)
-# Flux diverges as r1 becomes small since there is no r1 dependence to begin with so should be zero
-expected_flux = np.zeros(len(r2_vals))
-expected_flux[np.where(r1_vals > sigma/100)] = c*D1/V1*np.exp(-4/3*np.pi*c*np.power(r2_vals[np.where(r1_vals > sigma/100)],3))*(1/r1_vals[np.where(r1_vals > sigma/100)])
-
-
-# extract solution values
-actual_slice = np.zeros(len(r2_vals))
-r1_actual_flux = np.zeros(len(r2_vals))
-r2_actual_flux = np.zeros(len(r2_vals))
-for i in range(len(r2_vals)):
-    actual_slice[i] = p_h(Point(r2_vals[i], r1_vals[i]))
-    r1_actual_flux[i] = -r1_flux(Point(r2_vals[i], r1_vals[i]))
-    r2_actual_flux[i] = -r2_flux(Point(r2_vals[i], r1_vals[i]))
-
-# Plot solutions
-fig, ax1 = plt.subplots()
-ax1.set_xlabel('r_2')
-ax1.set_ylabel(f'Solution on boundary')
-ax1.plot(r2_vals, actual_slice, color='blue', label='numerical solution')
-ax1.plot(r2_vals, expected_slice, color='red', label='exact')
-
-# instantiate a second axes that shares the same x-axis
-ax2 = ax1.twinx()
-dif_slice = np.abs(actual_slice - expected_slice)
-ax2.set_ylabel('Difference to expected solution.')
-ax2.plot(r2_vals, dif_slice, color='black', label='difference')
-fig.legend()
-
-# Errors in flux
-fig2, flux_ax1 =  plt.subplots()
-flux_ax1.set_xlabel('r_2')
-flux_ax1.set_ylabel(f'R1 flux on boundary')
-flux_ax1.plot(r2_vals, r1_actual_flux, color='blue', label='numerical r1 flux')
-flux_ax1.plot(r2_vals, r2_actual_flux, color='blue', label='numerical r2 flux')
-flux_ax1.plot(r2_vals, expected_flux, color='red', label='exact')
-
-# instantiate a second axes that shares the same x-axis
-flux_ax2 = flux_ax1.twinx()
-dif_slice = np.abs(r1_actual_flux - expected_flux)
-flux_ax2.set_ylabel('Difference to expected flux.')
-flux_ax2.plot(r2_vals, dif_slice, color='black', label='difference')
-fig2.legend()
-
-plt.show()
-'''
+            # Only single mesh so just write final result
+            np.save(f'{output_filename}.npy', results)
+    # Compile all the results if there are multiple meshes.
+    if len(mesh_filenames) > 0:
+        final_results = None
+        for i in range(len(sigmas)):
+            data = np.load(f'{output_filename}{i}.npy')
+            if final_results is None:
+                final_results = data
+            else:
+                final_results = np.concatenate([final_results, data])
+        np.save(f'{output_filename}.npy', final_results)
