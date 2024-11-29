@@ -1,0 +1,16 @@
+# exclude everything
+outputs/*
+meshes/*.xml
+meshes/*.msh
+meshes/*.mesh*
+meshes/*.log*
+*.npy
+meshes/*_test
+__pycache__
+advection_diffusion_original.py
+advection_diffusion_mixed_flat.py
+
+# exceptions to the rule
+!outputs/.gitkeep 
+!meshes/exp_boundary_sigma0.1_gamma1.xml
+!meshes/exp_boundary_sigma0.1_gamma1_facet_region.xml
