@@ -10,12 +10,13 @@ ______  ^
 import numpy as np
 from fenics import *
 import matplotlib.pyplot as plt
-from create_flat_boundary import create_mesh
 
 parameters["form_compiler"]["representation"] = "uflacs"
 parameters["form_compiler"]["cpp_optimize"] = True
 parameters["form_compiler"]["quadrature_degree"] = 4
 
+np.seterr(all='raise')
+np.seterr(under='ignore')
 
 def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma, results, steady_state = False):
     """
@@ -84,7 +85,6 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     q_initial = QInitial(concentration, degree=deg)
 
     p_old = interpolate(p_initial, mixed_space.sub(0).collapse())
-    q_old = interpolate(q_initial, mixed_space.sub(1).collapse())
 
     # the formulation for p is primal, so the Dirichlet conditions remain so.
     p_right = p_initial
@@ -141,7 +141,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         p_h, q_h = u.split()
         adjusted_p_h = project(4*np.pi*r2**2*p_h, test_space)
         # Compute flux
-        flux = project(-4*np.pi*r2**2*(dMatrix * grad(p_h)), vector_space)
+        flux = project(-4*np.pi*r2**2*(dMatrix*(grad(p_h)) + r2*r2*p_h/q_h*p_h*r2_vec), vector_space)
         # Save the actual solution
         adjusted_p_h.rename("p", "p")
         q_h.rename("q", "q")
@@ -153,13 +153,8 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         difp = project((adjusted_p_h - p_approx), test_space)
         difp.rename("dif", "dif")
         output_file.write(difp, t)
-        # Compare flux to approximation
-        dif_flux = project((dot(-dMatrix * grad(p_h), r1_vec) - flux_approx),test_space)
-        dif_flux.rename("dif_flux", "dif_flux")
-        output_file.write(dif_flux, t)
         # Update the solution for next iteration
         assign(p_old, p_h)
-        assign(q_old, q_h)
         t += dt
 
     # Try to compute flux over boundary
@@ -202,13 +197,35 @@ class PInitial(UserExpression):
         self.gamma = gamma
 
     def eval(self, values, x):
-        values[0] = self.conc/V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*(1 - exp_reaction_boundary(self.sigma,
+        if x[1] > 0:
+            values[0] = self.conc/V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*(1 - exp_reaction_boundary(self.sigma,
                                                                                                           self.gamma,
                                                                                                           x[0])/x[1])
+        else:
+            values[0] = self.conc / V1 * np.exp(-4 / 3 * np.pi * self.conc * np.power(x[0], 3))
 
     def value_shape(self):
         return ()
 
+
+class Flux(UserExpression):
+    """
+    Custom expression to avoid the issues Fenics seems to have with exp().
+    """
+    def __init__(self, p, q, **kwargs):
+        super().__init__(**kwargs)
+        self.p = p
+        self.q = q
+        self.r1_vec = Constant((0, 1))
+        self.r2_vec = Constant((1, 0))
+
+    def eval(self, values, x):
+        gradient = -4*np.pi*x[0]**2*grad(self.p)
+        values[0] = D2*(dot(gradient,self.r2_vec) + (x[0]**2*self.p**2/self.q))
+        values[1] = D1*dot(gradient,self.r1_vec)
+
+    def value_shape(self):
+        return (2,)
 
 class QInitial(UserExpression):
     """
@@ -238,8 +255,14 @@ class FluxApprox(UserExpression):
         self.D1 = D1
 
     def eval(self, values, x):
-        values[0] = -self.D1*self.conc/V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*\
-                    (exp_reaction_boundary(self.sigma, self.gamma, x[0])/np.square(x[1]))
+        if np.square(x[1]) > 0:
+            try:
+                values[0] = -self.D1*self.conc / V1 * np.exp(-4 / 3 * np.pi * self.conc * np.power(x[0], 3)) * \
+                            (exp_reaction_boundary(self.sigma, self.gamma, x[0]) / np.square(x[1]))
+            except:
+                print(f'r1: {x[1]}, r2: {x[0]}')
+        else:
+            values[0] = 0
 
     def value_shape(self):
         return ()
@@ -258,16 +281,16 @@ if __name__ == '__main__':
     gammas = [1]
     mesh_folder = "meshes/"
     # Dimensions of the mesh
-    r1_max = 3
+    r1_max = 5
     r2_min = 0
-    r2_max = 3
+    r2_max = 5
     R = r1_max
     # Volume r2 direction (space is actually 6D not 2D).
     V2 = 4 * np.pi * np.power(r2_max, 3) / 3
     # Number of C molecules.
     Nc = V2
     # Concentration of C molecules.
-    c = Nc / V2
+    c = 10
     # Diffusion coefficients.
     D_BASE = 1
     D1 = 2 * D_BASE
@@ -275,7 +298,7 @@ if __name__ == '__main__':
     dMatrix = as_tensor([[D2, 0], [0, D1]])
     # ********** Time constants ********* #
     dt = 0.1
-    t_final = 0.1
+    t_final = 1
     # Toogle to solve steady state or time dependent problem
     steady_state = True
     for i in range(len(mesh_filenames)):
