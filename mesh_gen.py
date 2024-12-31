@@ -57,17 +57,36 @@ class BoundaryT(SubDomain):
     def inside(self, x, on_boundary):
         return near(x[1],self.R1_max, TOL) and on_boundary
 
-def boundary_func(sigma, gamma, r2):
-    return sigma*np.exp(-4*np.pi*gamma*np.power(r2,3)/3)
+def boundary_func(sigma, gamma, r2, corrections):
+    if corrections is None:
+        # Just set all corrections to 0
+        try:
+            corrections = np.array([0]*len(r2))
+        except TypeError:
+            # Occurs if r2 is float
+            corrections = 0
+    boundary = np.array([sigma]*len(r2)) #* np.exp(-4 * np.pi * gamma * np.power(r2, 3) / 3) + corrections
+    try:
+        boundary[boundary < 0] = 0
+    except TypeError:
+        if boundary < 0:
+            boundary = 0
+    return boundary
 
 
-def construct_vertices(sigma, gamma, r1_max, r2_max, num_bottom_points):
+def construct_vertices(sigma, gamma, r1_max, r2_max, num_bottom_points, corrections):
     domain_vertices = []
     # Add top left corner
     domain_vertices.append(Point(0, r1_max))
     # Add bottom boundary vertices
     r2_values = np.linspace(0, r2_max, num_bottom_points)
-    r1_values = boundary_func(sigma, gamma, r2_values)
+    r1_values = boundary_func(sigma, gamma, r2_values, corrections)
+    points = np.column_stack((r2_values, r1_values))
+    '''
+    for point in points:
+        print(point)
+    input()
+    '''
     for i in range(len(r2_values)):
         domain_vertices.append(Point(r2_values[i], r1_values[i]))
     # Add top right corner
@@ -76,14 +95,14 @@ def construct_vertices(sigma, gamma, r1_max, r2_max, num_bottom_points):
     domain_vertices.append(Point(0, r1_max))
     return domain_vertices
 
-def construct_mesh(sigma, gamma, r1_max, r2_max, bottom_points, mesh_filename):
-    domain_vertices = construct_vertices(sigma, gamma, r1_max, r2_max, bottom_points)
+def construct_mesh(sigma, gamma, r1_max, r2_max, bottom_points, mesh_filename, corrections=None):
+    domain_vertices = construct_vertices(sigma, gamma, r1_max, r2_max, bottom_points,corrections)
     domain = Polygon(domain_vertices)
-    mesh = generate_mesh(domain, 100)
+    mesh = generate_mesh(domain, 50*r1_max)
     plot(mesh)
     plt.show()
 
-    for j in range(1):
+    for j in range(0):
         refine_cell = MeshFunction("bool", mesh, mesh.topology().dim())
         for c in cells(mesh):
             vertices_x = sorted(c.get_vertex_coordinates()[::2])
@@ -95,8 +114,8 @@ def construct_mesh(sigma, gamma, r1_max, r2_max, bottom_points, mesh_filename):
                 else:
                     refine_cell[c] = False
         mesh = refine(mesh, refine_cell)
-        plot(mesh)
-        plt.show()
+        #plot(mesh)
+        #plt.show()
     # Print the mesh stats
     print(f'Number of cells {mesh.num_cells()} max size {mesh.hmax()} min size {mesh.hmin()}')
     sub_domains = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)
@@ -116,4 +135,10 @@ def construct_mesh(sigma, gamma, r1_max, r2_max, bottom_points, mesh_filename):
     File("meshes/" + mesh_filename + "_facet_region.xml") << sub_domains
 
 if __name__ == '__main__':
-    construct_mesh(0.1, 1, 5, 5, 1000, 'test_mesh')
+    r1_vals = np.array([1, 2, 4, 8, 16, 32])
+    for r1_val in r1_vals:
+        sigma = 0.1
+        r1_max = r1_val
+        r2_max = 5
+        gamma = 1
+        construct_mesh(sigma, gamma, r1_max, r2_max, 2, f'flat_mesh_sigma{sigma}_r1max{r1_max}_r2max{r2_max}')

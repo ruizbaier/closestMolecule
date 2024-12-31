@@ -11,7 +11,7 @@ parameters["form_compiler"]["cpp_optimize"] = True
 parameters["form_compiler"]["quadrature_degree"] = 4
 
 def exp_reaction_boundary(sigma, gamma, r2_val):
-    return sigma#*np.exp(-4/3*np.pi*gamma*np.power(r2_val, 3))
+    return sigma*np.exp(-4/3*np.pi*gamma*np.power(r2_val, 3))
 
 
 def flat_reaction_boundary(r2_val):
@@ -24,26 +24,25 @@ def Gstar(p, q, c, r2):
     Using this approximation avoids the floating point errors that arise from computing (r2*p)^2/q when p and q are
     very small.
     """
-    return conditional(gt(abs(1/(4*np.pi)*p - q), 0.00001), (p/q)*p*r2**2, 4*np.pi*c*p*r2**2)
+    return conditional(gt(abs(1/(4*c*np.pi)*p - q), 0.0001), (p/q)*p*r2**2, 4*np.pi*c*p*r2**2)
 
 
 class PInitial(UserExpression):
     """
     Custom expression to avoid the issues Fenics seems to have with exp().
     """
-    def __init__(self, conc, sigma, gamma, **kwargs):
+    def __init__(self, conc, sigma, gamma, V1, **kwargs):
         super().__init__(**kwargs)
         self.conc = conc
         self.sigma = sigma
         self.gamma = gamma
+        self.V1 = V1
 
     def eval(self, values, x):
         if x[1] > 0:
-            values[0] = self.conc/V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*(1 - exp_reaction_boundary(self.sigma,
-                                                                                                          self.gamma,
-                                                                                                          x[0])/x[1])
+            values[0] = self.conc/self.V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*(1 - exp_reaction_boundary(self.sigma,self.gamma,x[0])/x[1])
         else:
-            values[0] = self.conc / V1 * np.exp(-4 / 3 * np.pi * self.conc * np.power(x[0], 3))
+            values[0] = self.conc / self.V1 * np.exp(-4 / 3 * np.pi * self.conc * np.power(x[0], 3))
 
     def value_shape(self):
         return ()
@@ -53,20 +52,22 @@ class SInitial(UserExpression):
     """
     Custom expression to avoid the issues Fenics seems to have with exp().
     """
-    def __init__(self, conc, sigma, gamma, D1, **kwargs):
+    def __init__(self, conc, sigma, gamma, V1, **kwargs):
         super().__init__(**kwargs)
         self.conc = conc
         self.sigma = sigma
         self.gamma = gamma
+        self.V1 = V1
 
     def eval(self, values, x):
         values[0] = 0
         if np.square(x[1]) > 0:
             try:
-                values[1] = -self.conc/V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*\
+                values[1] = -self.conc/self.V1*np.exp(-4/3*np.pi*self.conc*np.power(x[0],3))*\
                         (exp_reaction_boundary(self.sigma, self.gamma, x[0])/np.square(x[1]))
             except:
-                print(f'r1: {x[1]}, r2: {x[0]}')
+                #print(f'r1: {x[1]}, r2: {x[0]}')
+                pass
         else:
             values[1] = 0
 
@@ -78,18 +79,19 @@ class QInitial(UserExpression):
     """
     Custom expression to avoid the issues Fenics seems to have with exp().
     """
-    def __init__(self, conc, **kwargs):
+    def __init__(self, conc, V1, **kwargs):
         super().__init__(**kwargs)
         self.conc = conc
+        self.V1 = V1
 
     def eval(self, values, x):
-        values[0] = 1/(4*np.pi*V1)*np.exp(-4/3*np.pi*self.conc*np.power(x[0], 3))
+        values[0] = 1/(4*np.pi*self.V1)*np.exp(-4/3*np.pi*self.conc*np.power(x[0], 3))
 
     def value_shape(self):
         return ()
 
 
-def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma, results, steady_state = False):
+def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma, results, V1, D1, D2, steady_state = False):
     """
     Solves a specific instance of the problem. Writes the numerical solution to an xdmf file
     and returns some flux calculations in the 'results' array.
@@ -124,6 +126,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     r1_vec = Constant((0, 1))
     r1_matrix = as_tensor([[0, 0], [0, 1]])
     r2_matrix = as_tensor([[1, 0], [0, 0]])
+    dMatrix = as_tensor([[D2, 0], [0, D1]])
 
     # mesh labels
     right = 21
@@ -132,14 +135,14 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     bottom = 24
 
     # ******** Finite dimensional spaces ******** #
-    deg = 2
+    deg = 3
     P0 = FiniteElement('DG', mesh.ufl_cell(), deg - 1)
     RT1 = FiniteElement('RT', mesh.ufl_cell(), deg)
-    P1 = FiniteElement('CG', mesh.ufl_cell(), deg)
+    P1 = FiniteElement('CG', mesh.ufl_cell(), deg-1)
     mixed_space = FunctionSpace(mesh, MixedElement([P0, RT1, P1]))
 
     # ******** Initialise output file ******** #
-    output_file = XDMFFile(f"outputs/test/exp_boundary_mixed_c{concentration}_sigma{sigma:.2f}_gamma{gamma:.2f}_deg{deg}.xdmf")
+    output_file = XDMFFile(f"outputs/exp_boundary_mixed_c{concentration}_sigma{sigma:.2f}_gamma{gamma:.2f}_deg{deg}.xdmf")
     output_file.parameters['rewrite_function_mesh'] = False
     output_file.parameters["flush_output"] = True
     output_file.parameters["functions_share_mesh"] = True
@@ -155,8 +158,8 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
 
     # ********* initial and boundary conditions ******** #
     # ********* initial and boundary conditions ******** #
-    p_initial = PInitial(concentration, sigma, gamma, degree=deg-1)
-    q_initial = QInitial(concentration, degree=deg)
+    p_initial = PInitial(concentration, sigma, gamma, V1, degree=deg-1)
+    q_initial = QInitial(concentration, V1, degree=deg-1)
 
     p_old = interpolate(p_initial, mixed_space.sub(0).collapse())
 
@@ -167,7 +170,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     p_bottom_boundary_condition = DirichletBC(mixed_space.sub(0), Constant(0), bdry, bottom)
 
     # Boundary conditions for s are complementary to those of p:
-    s_left = SInitial(concentration, sigma, gamma, D1)
+    s_left = SInitial(concentration, sigma, gamma, V1)
     s_left_boundary_condition = DirichletBC(mixed_space.sub(1), s_left, bdry,
                                             left)
 
@@ -217,8 +220,8 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     solver.parameters[solver_type + '_solver']['maximum_iterations'] = 10
 
     # (approximate) steady-state solution used for comparison
-    p_steady_state = PInitial(concentration, sigma, gamma, degree=deg)
-    p_flux_approx = SInitial(concentration, sigma, gamma, D1, degree=deg)
+    p_steady_state = PInitial(concentration, sigma, gamma, V1, degree=deg-1)
+    p_flux_approx = SInitial(concentration, sigma, gamma, V1, degree=deg)
 
     p_approx = 4 * np.pi * r2 ** 2 * interpolate(p_steady_state, mixed_space.sub(0).collapse())
     flux_approx = dMatrix*4 * np.pi * r2 ** 2 *interpolate(p_flux_approx, mixed_space.sub(1).collapse())
@@ -230,7 +233,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         adjusted_p_h = project(4*np.pi*r2**2*conditional(gt(p_h, 0), p_h, 0), mixed_space.sub(0).collapse())
         adjusted_q_h = project(conditional(gt(q_h, 0), q_h, 0), mixed_space.sub(2).collapse())
         # Compute flux
-        flux = project(dMatrix*4*np.pi*r2**2*s_h, mixed_space.sub(1).collapse())
+        flux = s_h#project(dMatrix*4*np.pi*r2**2*s_h, mixed_space.sub(1).collapse())
         # Save the actual solution
         adjusted_p_h.rename("p", "p")
         adjusted_q_h.rename("q", "q")
@@ -254,61 +257,60 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     total_flux = V1 * assemble(dot(flux, n) * 4 * pi * r1 ** 2 * ds(bottom))
     total_r1_flux = V1 * assemble(dot(flux, r1_matrix * n) * 4 * pi * r1 ** 2 * ds(bottom))
     total_r2_flux = V1 * assemble(dot(flux, r2_matrix * n) * 4 * pi * r1 ** 2 * ds(bottom))
-    total_approx_flux = V1 * assemble(dot(flux_approx, n) * 4 * pi * r1 ** 2 * ds(bottom))
+    total_approx_flux = 4*np.pi*D1*sigma*(concentration/(gamma+concentration))
 
     print(f'r1 flux: {total_r1_flux} r2 flux: {total_r2_flux} total flux: {total_flux} approximate flux: '
           f'{total_approx_flux} error: {total_flux - total_approx_flux} sigma: {sigma} sigma sq: {sigma ** 2}')
     results.append([sigma, gamma, concentration, total_r1_flux, total_r2_flux, total_flux, total_approx_flux])
+    return flux, total_flux
 
 
 
 if __name__ == '__main__':
+    # Concentration of C molecules.
+    c = np.array([1])
     # The name of the output file for the flux results. Not the numerical solution, see solve_problem_instance() for
     # that output file.
-    output_filename = 'exp_test.npy'
+    output_filename = 'concentration_test'
     # The meshes to solve the problem for. Represented as an array to allow scanning through multiple problem instances.
-    mesh_filenames = ["exp_boundary_sigma0.1_gamma1"]
+    mesh_filenames = ["exp_boundary_sigma0.1_gamma1_r1max5_r2max5"]*len(c)
+
 
     # ******* Model constants ****** #
     # Sigma and gamma values must match the boundaries of the meshes in 'mesh_filenames'.
     #sigma_adjustments = np.load('corrections.npy')
-    sigmas = np.array([0.1])
-    gammas = [1]
-    mesh_folder = "meshes/"
+    sigmas = np.array([0.1]*len(c))
+    gammas = [1]*len(c)
+    mesh_folder = "meshes/gamma_test/"
     # Dimensions of the mesh
-    r1_max = 5
+    r1_max = [5]*len(c)
     r2_min = 0
-    r2_max = 5
+    r2_max = [5]*len(c)
     R = r1_max
-    # Volume r2 direction (space is actually 6D not 2D).
-    V2 = 4 * np.pi * np.power(r2_max, 3) / 3
-    # Number of C molecules.
-    Nc = V2
-    # Concentration of C molecules.
-    c = np.array([10])
     # Diffusion coefficients.
     D_BASE = 1
     D1 = 2 * D_BASE
     D2 = 1.5 * D_BASE
-    dMatrix = as_tensor([[D2, 0], [0, D1]])
     # ********** Time constants ********* #
     dt = 0.1
     t_final = 0.1
     # Toogle to solve steady state or time dependent problem
     steady_state = True
-    for i in range(len(mesh_filenames)):
+    for i in range(len(c)):
         results = []
         mesh_filename = mesh_filenames[i]
         sigma = sigmas[i]
         gamma = gammas[i]
         r1_min = sigma
         # Volume in r1 direction.
-        V1 = 4 * np.pi * np.power(R - sigma, 3) / 3
+        V1 = 4 * np.pi * np.power(r1_max[i] - sigma, 3) / 3
+        # Volume r2 direction (space is actually 6D not 2D).
+        V2 = 4 * np.pi * np.power(r2_max[i], 3) / 3
         # Read in mesh.
         mesh = Mesh(mesh_folder + mesh_filename + ".xml")
         bdry = MeshFunction("size_t", mesh, mesh_folder + mesh_filename + "_facet_region.xml")
         # Solve problem
-        solve_problem_instance(c[i], t_final, dt, mesh, bdry, sigma, gamma, results, steady_state)
+        solve_problem_instance(c[i], t_final, dt, mesh, bdry, sigma, gamma, results, V1, D1, D2, steady_state)
         print(results)
         results = np.array(results)
         if len(mesh_filenames) > 0:

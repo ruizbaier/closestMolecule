@@ -133,7 +133,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     solver.parameters[solver_type + '_solver']['relative_tolerance'] = 1e-10
     solver.parameters[solver_type + '_solver']['maximum_iterations'] = 10
 
-    vector_space = VectorFunctionSpace(mesh, "DG", deg - 1)
+    vector_space = FunctionSpace(mesh, "RT", deg)
 
     while (t <= t_final):
         print("t=%.3f" % t)
@@ -141,7 +141,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         p_h, q_h = u.split()
         adjusted_p_h = project(4*np.pi*r2**2*p_h, test_space)
         # Compute flux
-        flux = project(-4*np.pi*r2**2*(dMatrix*(grad(p_h)) + r2*r2*p_h/q_h*p_h*r2_vec), vector_space)
+        flux = project(-4*np.pi*r2**2*(dMatrix*(grad(p_h) + r2*r2*p_h/q_h*p_h*r2_vec)), vector_space)
         # Save the actual solution
         adjusted_p_h.rename("p", "p")
         q_h.rename("q", "q")
