@@ -1,7 +1,10 @@
-//load "msh3"; 
+//load "msh3";
 load "medit";
+//Prints command line arguments, arguments are ["FreeFem++", "filename", "sigma", "gamma"]
+//for (int i = 0; i < ARGV.n; i++)
+//    cout << ARGV[i] << endl;
 
-real sigma = 0.1, infx = 3, infy = 3, gamma = 1, fend = sigma*exp(-4./3.*pi*gamma*infx^3);
+real sigma = atof(ARGV[2]), infx = 5, infy = 5, gamma = atof(ARGV[3]), fend = sigma*exp(-4./3.*pi*gamma*infx^3);
 
 int right = 21, top=22, left = 23, bottom = 24;
 
