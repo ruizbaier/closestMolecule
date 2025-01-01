@@ -3,7 +3,7 @@ outputs/*
 meshes/*.xml
 meshes/*.msh
 meshes/*.mesh*
-meshes/*.log*
+meshes/*meshWithExpReal.log
 *.npy
 meshes/*_test
 __pycache__
