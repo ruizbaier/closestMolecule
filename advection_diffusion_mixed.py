@@ -170,8 +170,8 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     p_bottom_boundary_condition = DirichletBC(mixed_space.sub(0), Constant(0), bdry, bottom)
 
     # Boundary conditions for s are complementary to those of p:
-    s_left = SInitial(concentration, sigma, gamma, V1)
-    s_left_boundary_condition = DirichletBC(mixed_space.sub(1), s_left, bdry,
+    #s_left = SInitial(concentration, sigma, gamma, V1)
+    s_left_boundary_condition = DirichletBC(mixed_space.sub(1), (Constant(0), Constant(0)), bdry,
                                             left)
 
     # the formulation for q is primal, so the Dirichlet conditions remain so
@@ -225,7 +225,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
 
     p_approx = 4 * np.pi * r2 ** 2 * interpolate(p_steady_state, mixed_space.sub(0).collapse())
     flux_approx = dMatrix*4 * np.pi * r2 ** 2 *interpolate(p_flux_approx, mixed_space.sub(1).collapse())
-
+    dif_tolerance = 0
     while (t <= t_final):
         print("t=%.3f" % t)
         solver.solve()
@@ -233,7 +233,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         adjusted_p_h = project(4*np.pi*r2**2*conditional(gt(p_h, 0), p_h, 0), mixed_space.sub(0).collapse())
         adjusted_q_h = project(conditional(gt(q_h, 0), q_h, 0), mixed_space.sub(2).collapse())
         # Compute flux
-        flux = s_h#project(dMatrix*4*np.pi*r2**2*s_h, mixed_space.sub(1).collapse())
+        flux = project(dMatrix*4*np.pi*r2**2*s_h, mixed_space.sub(1).collapse())
         # Save the actual solution
         adjusted_p_h.rename("p", "p")
         adjusted_q_h.rename("q", "q")
@@ -245,10 +245,18 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         difp = project((adjusted_p_h - p_approx), mixed_space.sub(0).collapse())
         difp.rename("dif", "dif")
         output_file.write(difp, t)
+        # Relative error
+        difp_rel = project(conditional(gt(np.abs(adjusted_p_h - p_approx), dif_tolerance), (adjusted_p_h - p_approx)/adjusted_p_h, 0))
+        difp_rel.rename("dif_rel", "dif_rel")
+        output_file.write(difp_rel,t)
         # Compare flux to approximation
         dif_flux = project(flux - flux_approx, mixed_space.sub(1).collapse())
         dif_flux.rename("dif_flux", "dif_flux")
         output_file.write(dif_flux, t)
+        #Relative error in flux
+        dif_flux_rel = project(conditional(gt(np.abs(dot(flux - flux_approx,r1_vec)), dif_tolerance), (dot(flux - flux_approx,r1_vec)) / dot(flux,r1_vec), 0))
+        dif_flux_rel.rename("dif_flux_rel", "dif_flux_rel")
+        output_file.write(dif_flux_rel, t)
         # Update the solution for next iteration
         assign(p_old, p_h)
         t += dt
@@ -268,19 +276,29 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
 
 if __name__ == '__main__':
     # Concentration of C molecules.
-    c = np.array([1])
+    c = [10]*12
+    print(c)
     # The name of the output file for the flux results. Not the numerical solution, see solve_problem_instance() for
     # that output file.
-    output_filename = 'concentration_test'
+    output_filename = 'gamma_test/gamma_testc10.npy'
     # The meshes to solve the problem for. Represented as an array to allow scanning through multiple problem instances.
-    mesh_filenames = ["exp_boundary_sigma0.1_gamma1_r1max5_r2max5"]*len(c)
+    mesh_filenames = ["exp_boundary_sigma0.1_gamma0.25_r1max5_r2max5", "exp_boundary_sigma0.1_gamma0.5_r1max5_r2max5",
+                      "exp_boundary_sigma0.1_gamma0.5_r1max5_r2max5", "exp_boundary_sigma0.1_gamma1_r1max5_r2max5",
+                      "exp_boundary_sigma0.1_gamma1.25_r1max5_r2max5", "exp_boundary_sigma0.1_gamma1.5_r1max5_r2max5",
+                      "exp_boundary_sigma0.1_gamma1.75_r1max5_r2max5", "exp_boundary_sigma0.1_gamma2_r1max5_r2max5",
+                      "exp_boundary_sigma0.1_gamma2.25_r1max5_r2max5", "exp_boundary_sigma0.1_gamma2.5_r1max5_r2max5",
+                      "exp_boundary_sigma0.1_gamma2.75_r1max5_r2max5", "exp_boundary_sigma0.1_gamma3_r1max5_r2max5"]
 
-
+    '''["exp_boundary_sigma0.025_gamma1_r1max5_r2max5", "exp_boundary_sigma0.05_gamma1_r1max5_r2max5",
+    "exp_boundary_sigma0.075_gamma1_r1max5_r2max5", "exp_boundary_sigma0.1_gamma1_r1max5_r2max5",
+    "exp_boundary_sigma0.125_gamma1_r1max5_r2max5", "exp_boundary_sigma0.15_gamma1_r1max5_r2max5",
+    "exp_boundary_sigma0.175_gamma1_r1max5_r2max5", "exp_boundary_sigma0.2_gamma1_r1max5_r2max5",
+    "exp_boundary_sigma0.225_gamma1_r1max5_r2max5", "exp_boundary_sigma0.25_gamma1_r1max5_r2max5"]'''
     # ******* Model constants ****** #
     # Sigma and gamma values must match the boundaries of the meshes in 'mesh_filenames'.
     #sigma_adjustments = np.load('corrections.npy')
-    sigmas = np.array([0.1]*len(c))
-    gammas = [1]*len(c)
+    sigmas = [0.1]*len(c)
+    gammas = np.arange(0.25, 3.25, 0.25)
     mesh_folder = "meshes/gamma_test/"
     # Dimensions of the mesh
     r1_max = [5]*len(c)

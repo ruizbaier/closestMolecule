@@ -4,7 +4,7 @@ load "medit";
 //for (int i = 0; i < ARGV.n; i++)
 //    cout << ARGV[i] << endl;
 
-real sigma = atof(ARGV[2]), infx = 5, infy = 5, gamma = atof(ARGV[3]), fend = sigma*exp(-4./3.*pi*gamma*infx^3);
+real sigma = 0.1, infx = 5, infy = 5, gamma = 1, fend = sigma*exp(-4./3.*pi*gamma*infx^3);
 
 int right = 21, top=22, left = 23, bottom = 24;
 
@@ -19,9 +19,9 @@ mesh Th=buildmesh(b1(nps)+b2(nps)+b3(nps)+b4(5*nps));
 
 plot(Th);
 
-Th = adaptmesh(Th,region,iso=1,hmax=0.025, hmin=0.005,keepbackvertices=0,nbsmooth=110,nbvx=100000);
+Th = adaptmesh(Th,region,iso=1,hmax=0.02, hmin=0.005,keepbackvertices=0,nbsmooth=110,nbvx=100000);
 
-savemesh(Th,"sigma_test/exp_boundary_sigma3on8pi_gamma1_r1max5_r2max5.mesh");
+savemesh(Th,"exp_boundary_sigma0.1_gamma1_r1max5_r2max5.mesh");
 
 
 plot(Th);

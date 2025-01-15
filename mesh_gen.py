@@ -57,15 +57,8 @@ class BoundaryT(SubDomain):
     def inside(self, x, on_boundary):
         return near(x[1],self.R1_max, TOL) and on_boundary
 
-def boundary_func(sigma, gamma, r2, corrections):
-    if corrections is None:
-        # Just set all corrections to 0
-        try:
-            corrections = np.array([0]*len(r2))
-        except TypeError:
-            # Occurs if r2 is float
-            corrections = 0
-    boundary = np.array([sigma]*len(r2)) #* np.exp(-4 * np.pi * gamma * np.power(r2, 3) / 3) + corrections
+def boundary_func(sigma, gamma, r2):
+    boundary = sigma*np.exp(-4 * np.pi * gamma * np.power(r2, 3) / 3)
     try:
         boundary[boundary < 0] = 0
     except TypeError:
@@ -74,13 +67,13 @@ def boundary_func(sigma, gamma, r2, corrections):
     return boundary
 
 
-def construct_vertices(sigma, gamma, r1_max, r2_max, num_bottom_points, corrections):
+def construct_vertices(sigma, gamma, r1_max, r2_max, num_bottom_points):
     domain_vertices = []
     # Add top left corner
     domain_vertices.append(Point(0, r1_max))
     # Add bottom boundary vertices
     r2_values = np.linspace(0, r2_max, num_bottom_points)
-    r1_values = boundary_func(sigma, gamma, r2_values, corrections)
+    r1_values = boundary_func(sigma, gamma, r2_values)
     points = np.column_stack((r2_values, r1_values))
     '''
     for point in points:
@@ -95,14 +88,14 @@ def construct_vertices(sigma, gamma, r1_max, r2_max, num_bottom_points, correcti
     domain_vertices.append(Point(0, r1_max))
     return domain_vertices
 
-def construct_mesh(sigma, gamma, r1_max, r2_max, bottom_points, mesh_filename, corrections=None):
-    domain_vertices = construct_vertices(sigma, gamma, r1_max, r2_max, bottom_points,corrections)
+def construct_mesh(sigma, gamma, r1_max, r2_max, bottom_points, mesh_filename):
+    domain_vertices = construct_vertices(sigma, gamma, r1_max, r2_max, bottom_points)
     domain = Polygon(domain_vertices)
-    mesh = generate_mesh(domain, 50*r1_max)
-    plot(mesh)
-    plt.show()
+    mesh = generate_mesh(domain, 20*r1_max)
+    #plot(mesh)
+    #plt.show()
 
-    for j in range(0):
+    for j in range(1):
         refine_cell = MeshFunction("bool", mesh, mesh.topology().dim())
         for c in cells(mesh):
             vertices_x = sorted(c.get_vertex_coordinates()[::2])
