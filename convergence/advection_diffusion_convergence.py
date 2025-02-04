@@ -372,11 +372,14 @@ if __name__ == '__main__':
     deg = 2
     hh = []
     eu = []
+    ef = []
+    rf = []
     ru = []
     e0 = []
     r0 = []
     ru.append(0)
     r0.append(0)
+    rf.append(0)
     # The meshes to solve the problem for. Represented as an array to allow scanning through multiple problem instances.
     mesh_filenames = ["rect_boundary"]
     mesh_resolutions = [8, 16, 32]
@@ -421,21 +424,25 @@ if __name__ == '__main__':
         p_h, p_approx, flux, flux_approx = solve_problem_instance_mixed(c[0], t_final, dt, mesh, bdry, sigma, deg, steady_state)
         E_u_H1 = assemble((grad(p_approx) - grad(p_h)) ** 2 * dx)
         E_u_L2 = assemble((p_approx - p_h) ** 2 * dx)
+
+        E_f_Hdiv = assemble((flux-flux_approx)**2*dx + div(flux-flux_approx)**2*dx)
         #E_u_L2 = assemble((flux_approx - flux) ** 2 * dx)
 
         eu.append(pow(E_u_H1, 0.5))
         e0.append(pow(E_u_L2, 0.5))
+        ef.append(pow(E_f_Hdiv,0.5))
 
         if (i > 0):
             ru.append(ln(eu[i] / eu[i - 1]) / ln(hh[i] / hh[i - 1]))
             r0.append(ln(e0[i] / e0[i - 1]) / ln(hh[i] / hh[i - 1]))
+            rf.append(ln(ef[i] / ef[i - 1]) / ln(hh[i] / hh[i - 1]))
     # ********* Generating error history ****** #
     print('====================================================')
-    print('  h    e_1(u)   r_1(u)   e_0(u)  r_0(u)    ')
+    print('  h    e_div(f)   r_div(f)    e_1(u)   r_1(u)   e_0(u)  r_0(u)    ')
     #print('  h    e_0(u)  r_0(u)    ')
     print('====================================================')
     for nk in range(len(mesh_resolutions)):
-        print('{:.4f} {:6.2e}  {:.3f}  {:6.2e}  {:.3f} '.format(hh[nk], eu[nk], ru[nk], e0[nk], r0[nk]))
+        print('{:.4f} {:6.2e}  {:.3f}   {:6.2e}  {:.3f}  {:6.2e}  {:.3f} '.format(hh[nk], ef[nk], rf[nk], eu[nk], ru[nk], e0[nk], r0[nk]))
         #print('{:.4f} {:6.2e}  {:.3f} '.format(hh[nk], e0[nk], r0[nk]))
     print('====================================================')
 
