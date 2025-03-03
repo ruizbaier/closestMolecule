@@ -17,6 +17,8 @@ q + grad(q).r2vec + r2^2*p = f3
 
 BCs: p=p_ex and q = q_ex everywhere
 
+mixed for s-p and C0IP for q (as in Burman-Ern 07)
+
 '''
 
 from fenics import *
@@ -30,7 +32,7 @@ import sympy2fenics as sf
 def str2exp(s):
     return sf.sympy2exp(sf.str2sympy(s))
 
-fileO = XDMFFile("outputs/convergences.xdmf")
+fileO = XDMFFile("outputs/convergences-C0IP.xdmf")
 fileO.parameters['rewrite_function_mesh']=True
 fileO.parameters["functions_share_mesh"] = True
 fileO.parameters["flush_output"] = True
@@ -53,10 +55,9 @@ D2 = Constant(1.5e-3)
 D = Constant(((D2,0),(0,D1)))
 r2vec = Constant((1,0))
 density = Constant(1.)
+stab = Constant(0.005)
 
-artif = Constant(0.)
-
-deg=1; nkmax = 6
+deg=1; nkmax = 5
 
 hh = []; nn = [] 
 ep = []; rp = []
@@ -75,11 +76,11 @@ for nk in range(nkmax):
     bdry = MeshFunction("size_t", mesh, 1)
     bdry.set_all(0)
     left = 31; rest= 32
-    GLeft = CompiledSubDomain("near(x[0],1) && on_boundary")
-    GRest = CompiledSubDomain("(near(x[0],0) || near(x[1],0) || near(x[1],1)) && on_boundary")
+    GLeft = CompiledSubDomain("near(x[0],0) && on_boundary")
+    GRest = CompiledSubDomain("(near(x[0],1) || near(x[1],0) || near(x[1],1)) && on_boundary")
     GLeft.mark(bdry,left); GRest.mark(bdry,rest)
     ds = Measure("ds", subdomain_data = bdry)
-
+    hK = CellDiameter(mesh)
     n = FacetNormal(mesh)
     r2, r1 = SpatialCoordinate(mesh)
     weight = (4 * pi * r1 * r2) ** 2
@@ -110,22 +111,26 @@ for nk in range(nkmax):
     q_ex    = Expression(str2exp(q_str), degree=5, domain=mesh)
     sig_ex  = -grad(p_ex) - G(p_ex,q_ex)
     f2_ex   = div_rad(D*sig_ex)
-    f3_ex   = q_ex + dot(grad(q_ex),r2vec) + r2**2*p_ex #-artif*div_rad(grad(q_ex)) 
+    f3_ex   = q_ex + dot(grad(q_ex),r2vec)  + r2**2*p_ex 
 
     # ********* boundary conditions (Essential) ******** #
     # p = p_ex (natural) everywhere, and q=q_ex (essential) on the inlet BC: left
     bcQ = DirichletBC(Vh.sub(2), q_ex, bdry, left)
 
+    beta = Constant(1.)
+    
     # ********* Weak forms ********* #
     lhs = dot(sig+G(p,q),tau)*weight*dx \
             - p*div_rad(tau)*weight*dx  \
             - v*div_rad(D*sig)*weight*dx  \
-            + (q+dot(grad(q),r2vec)+r2**2*p)*w*weight*dx #\
-            #+ artif*dot(grad(q),grad(w))*weight*dx 
+            + (q - div_rad(r2vec)*q + r2**2*p)*w*weight*dx \
+            - dot(r2vec,grad(w))*q*weight*dx \
+            + dot(r2vec,n)*q*w*weight*ds(rest) \
+            + stab/(deg+1)**3.5*avg(hK)**2*beta*dot(jump(grad(q)),n('+'))*dot(jump(grad(w)),n('+'))*weight*dS
     
     rhs  = - p_ex*dot(tau,n)*weight*ds \
             - f2_ex*v*weight*dx \
-            + f3_ex*w*weight*dx  
+            + f3_ex*w*weight*dx 
 
     FF = lhs - rhs
 
@@ -134,8 +139,8 @@ for nk in range(nkmax):
     solver  = NonlinearVariationalSolver(problem)
     solver.parameters['nonlinear_solver']                    = 'newton'
     solver.parameters['newton_solver']['linear_solver']      = 'umfpack'
-    solver.parameters['newton_solver']['absolute_tolerance'] = 1e-7
-    solver.parameters['newton_solver']['relative_tolerance'] = 1e-7
+    solver.parameters['newton_solver']['absolute_tolerance'] = 1e-8
+    solver.parameters['newton_solver']['relative_tolerance'] = 1e-8
 
     solver.solve()
     sig_h, p_h, q_h = u.split()
