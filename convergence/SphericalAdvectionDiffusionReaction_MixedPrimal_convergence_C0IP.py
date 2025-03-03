@@ -55,7 +55,7 @@ D2 = Constant(1.5e-3)
 D = Constant(((D2,0),(0,D1)))
 r2vec = Constant((1,0))
 density = Constant(1.)
-stab = Constant(0.005)
+stab = Constant(0.0075)
 
 deg=1; nkmax = 5
 
@@ -111,7 +111,7 @@ for nk in range(nkmax):
     q_ex    = Expression(str2exp(q_str), degree=5, domain=mesh)
     sig_ex  = -grad(p_ex) - G(p_ex,q_ex)
     f2_ex   = div_rad(D*sig_ex)
-    f3_ex   = q_ex + dot(grad(q_ex),r2vec)  + r2**2*p_ex 
+    f3_ex   = dot(grad(q_ex),r2vec)  + r2**2*p_ex 
 
     # ********* boundary conditions (Essential) ******** #
     # p = p_ex (natural) everywhere, and q=q_ex (essential) on the inlet BC: left
@@ -123,7 +123,7 @@ for nk in range(nkmax):
     lhs = dot(sig+G(p,q),tau)*weight*dx \
             - p*div_rad(tau)*weight*dx  \
             - v*div_rad(D*sig)*weight*dx  \
-            + (q - div_rad(r2vec)*q + r2**2*p)*w*weight*dx \
+            + (- div_rad(r2vec)*q + r2**2*p)*w*weight*dx \
             - dot(r2vec,grad(w))*q*weight*dx \
             + dot(r2vec,n)*q*w*weight*ds(rest) \
             + stab/(deg+1)**3.5*avg(hK)**2*beta*dot(jump(grad(q)),n('+'))*dot(jump(grad(w)),n('+'))*weight*dS
