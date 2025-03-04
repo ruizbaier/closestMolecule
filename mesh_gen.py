@@ -57,8 +57,8 @@ class BoundaryT(SubDomain):
     def inside(self, x, on_boundary):
         return near(x[1],self.R1_max, TOL) and on_boundary
 
-def boundary_func(sigma, gamma, r2):
-    boundary = sigma*np.exp(-4 * np.pi * gamma * np.power(r2, 3) / 3)
+def boundary_func(sigma, gamma, r2, *a0):
+    boundary = sigma*np.exp(-4 * np.pi * gamma * np.power(r2, 3) / 3) - a0[0]
     try:
         boundary[boundary < 0] = 0
     except TypeError:
@@ -67,13 +67,13 @@ def boundary_func(sigma, gamma, r2):
     return boundary
 
 
-def construct_vertices(sigma, gamma, r1_max, r2_max, num_bottom_points):
+def construct_vertices(sigma, gamma, r1_max, r2_max, num_bottom_points, *a0):
     domain_vertices = []
     # Add top left corner
     domain_vertices.append(Point(0, r1_max))
     # Add bottom boundary vertices
     r2_values = np.linspace(0, r2_max, num_bottom_points)
-    r1_values = boundary_func(sigma, gamma, r2_values)
+    r1_values = boundary_func(sigma, gamma, r2_values, a0[0])
     points = np.column_stack((r2_values, r1_values))
     '''
     for point in points:
@@ -88,8 +88,8 @@ def construct_vertices(sigma, gamma, r1_max, r2_max, num_bottom_points):
     domain_vertices.append(Point(0, r1_max))
     return domain_vertices
 
-def construct_mesh(sigma, gamma, r1_max, r2_max, bottom_points, mesh_filename):
-    domain_vertices = construct_vertices(sigma, gamma, r1_max, r2_max, bottom_points)
+def construct_mesh(sigma, gamma, r1_max, r2_max, bottom_points, mesh_filename, *a0):
+    domain_vertices = construct_vertices(sigma, gamma, r1_max, r2_max, bottom_points, a0[0])
     domain = Polygon(domain_vertices)
     mesh = generate_mesh(domain, 20*r1_max)
     #plot(mesh)
@@ -128,10 +128,10 @@ def construct_mesh(sigma, gamma, r1_max, r2_max, bottom_points, mesh_filename):
     File("meshes/" + mesh_filename + "_facet_region.xml") << sub_domains
 
 if __name__ == '__main__':
-    r1_vals = np.array([1, 2, 4, 8, 16, 32])
+    r1_vals = np.array([5])
     for r1_val in r1_vals:
         sigma = 0.1
         r1_max = r1_val
         r2_max = 5
         gamma = 1
-        construct_mesh(sigma, gamma, r1_max, r2_max, 2, f'flat_mesh_sigma{sigma}_r1max{r1_max}_r2max{r2_max}')
+        construct_mesh(sigma, gamma, r1_max, r2_max, 1000, f'exp_mesh_sigma{sigma}_r1max{r1_max}_r2max{r2_max}')

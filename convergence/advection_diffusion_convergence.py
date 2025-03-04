@@ -300,8 +300,7 @@ def solve_problem_instance_mixed(concentration, t_final, dt, mesh, bdry, sigma, 
     p_bottom_boundary_condition = DirichletBC(mixed_space.sub(0), Constant(0), bdry, bottom)
 
     # Boundary conditions for s are complementary to those of p:
-    s_left = SInitial(concentration, sigma)
-    s_left_boundary_condition = DirichletBC(mixed_space.sub(1), s_left, bdry,
+    s_left_boundary_condition = DirichletBC(mixed_space.sub(1), (Constant(0), Constant(0)), bdry,
                                             left)
 
     # the formulation for q is primal, so the Dirichlet conditions remain so
@@ -350,8 +349,8 @@ def solve_problem_instance_mixed(concentration, t_final, dt, mesh, bdry, sigma, 
     solver.parameters[solver_type + '_solver']['maximum_iterations'] = 10
 
     # (approximate) steady-state solution used for comparison
-    p_steady_state = PInitial(concentration, sigma, degree=deg)
-    p_flux_approx = SInitial(concentration, sigma, degree=deg)
+    p_steady_state = PInitial(concentration, sigma, degree=deg+3)
+    p_flux_approx = SInitial(concentration, sigma, degree=deg+3)
 
     p_approx = interpolate(p_steady_state, mixed_space.sub(0).collapse())
     p_flux_approx = interpolate(p_flux_approx, mixed_space.sub(1).collapse())
@@ -369,7 +368,7 @@ def solve_problem_instance_mixed(concentration, t_final, dt, mesh, bdry, sigma, 
 
 
 if __name__ == '__main__':
-    deg = 2
+    deg = 4
     hh = []
     eu = []
     ru = []
@@ -379,7 +378,7 @@ if __name__ == '__main__':
     r0.append(0)
     # The meshes to solve the problem for. Represented as an array to allow scanning through multiple problem instances.
     mesh_filenames = ["rect_boundary"]
-    mesh_resolutions = [8, 16, 32]
+    mesh_resolutions = [10, 20, 30, 40]
     # ******* Model constants ****** #
     # Sigma and gamma values must match the boundaries of the meshes in 'mesh_filenames'.
     sigmas = np.array([0.1])
@@ -406,6 +405,7 @@ if __name__ == '__main__':
     # Toogle to solve steady state or time dependent problem
     steady_state = True
     for i in range(len(mesh_resolutions)):
+        print(f'Current mesh resolution {i}')
         mesh_filename = mesh_filenames[0]
         sigma = sigmas[0]
         r1_min = sigma
@@ -419,12 +419,16 @@ if __name__ == '__main__':
         hh.append(mesh.hmax())
         # Solve problem
         p_h, p_approx, flux, flux_approx = solve_problem_instance_mixed(c[0], t_final, dt, mesh, bdry, sigma, deg, steady_state)
-        E_u_H1 = assemble((grad(p_approx) - grad(p_h)) ** 2 * dx)
-        E_u_L2 = assemble((p_approx - p_h) ** 2 * dx)
+        #E_u_H1 = assemble((grad(p_approx) - grad(p_h)) ** 2 * dx)
+        #E_u_L2 = assemble((p_approx - p_h) ** 2 * dx)
         #E_u_L2 = assemble((flux_approx - flux) ** 2 * dx)
+        p_steady_state = PInitial(c[0], sigma, degree= 4)
+        p_flux_approx = SInitial(c[0], sigma, degree= 4)
 
-        eu.append(pow(E_u_H1, 0.5))
-        e0.append(pow(E_u_L2, 0.5))
+        #eu.append(pow(E_u_H1, 0.5))
+        #e0.append(pow(E_u_L2, 0.5))
+        eu.append(errornorm(p_steady_state, p_h, norm_type='H10'))
+        e0.append(errornorm(p_flux_approx, flux, norm_type='L2'))
 
         if (i > 0):
             ru.append(ln(eu[i] / eu[i - 1]) / ln(hh[i] / hh[i - 1]))
@@ -432,11 +436,9 @@ if __name__ == '__main__':
     # ********* Generating error history ****** #
     print('====================================================')
     print('  h    e_1(u)   r_1(u)   e_0(u)  r_0(u)    ')
-    #print('  h    e_0(u)  r_0(u)    ')
     print('====================================================')
     for nk in range(len(mesh_resolutions)):
         print('{:.4f} {:6.2e}  {:.3f}  {:6.2e}  {:.3f} '.format(hh[nk], eu[nk], ru[nk], e0[nk], r0[nk]))
-        #print('{:.4f} {:6.2e}  {:.3f} '.format(hh[nk], e0[nk], r0[nk]))
     print('====================================================')
 
 

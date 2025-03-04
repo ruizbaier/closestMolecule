@@ -1,6 +1,5 @@
 import numpy as np
 from fenics import *
-from mesh_gen import construct_mesh
 
 np.seterr(all='raise')
 np.seterr(under='ignore')
@@ -24,7 +23,7 @@ def Gstar(p, q, c, r2):
     Using this approximation avoids the floating point errors that arise from computing (r2*p)^2/q when p and q are
     very small.
     """
-    return conditional(gt(abs(1/(4*c*np.pi)*p - q), 0.0001), (p/q)*p*r2**2, 4*np.pi*c*p*r2**2)
+    return conditional(gt(abs(1/(4*c*np.pi)*p - q), 0.001), (p/q)*p*r2**2, 4*np.pi*c*p*r2**2)
 
 
 class PInitial(UserExpression):
@@ -135,14 +134,14 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     bottom = 24
 
     # ******** Finite dimensional spaces ******** #
-    deg = 3
+    deg = 2
     P0 = FiniteElement('DG', mesh.ufl_cell(), deg - 1)
     RT1 = FiniteElement('RT', mesh.ufl_cell(), deg)
-    P1 = FiniteElement('CG', mesh.ufl_cell(), deg-1)
+    P1 = FiniteElement('CG', mesh.ufl_cell(), deg)
     mixed_space = FunctionSpace(mesh, MixedElement([P0, RT1, P1]))
 
     # ******** Initialise output file ******** #
-    output_file = XDMFFile(f"outputs/exp_boundary_mixed_c{concentration}_sigma{sigma:.2f}_gamma{gamma:.2f}_deg{deg}.xdmf")
+    output_file = XDMFFile(f"exp_boundary_mixed_c{concentration}_sigma{sigma:.2f}_gamma{gamma:.2f}_deg{deg}.xdmf")
     output_file.parameters['rewrite_function_mesh'] = False
     output_file.parameters["flush_output"] = True
     output_file.parameters["functions_share_mesh"] = True
@@ -159,7 +158,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     # ********* initial and boundary conditions ******** #
     # ********* initial and boundary conditions ******** #
     p_initial = PInitial(concentration, sigma, gamma, V1, degree=deg-1)
-    q_initial = QInitial(concentration, V1, degree=deg-1)
+    q_initial = QInitial(concentration, V1, degree=deg)
 
     p_old = interpolate(p_initial, mixed_space.sub(0).collapse())
 
@@ -225,7 +224,6 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
 
     p_approx = 4 * np.pi * r2 ** 2 * interpolate(p_steady_state, mixed_space.sub(0).collapse())
     flux_approx = dMatrix*4 * np.pi * r2 ** 2 *interpolate(p_flux_approx, mixed_space.sub(1).collapse())
-    dif_tolerance = 0
     while (t <= t_final):
         print("t=%.3f" % t)
         solver.solve()
@@ -245,22 +243,13 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         difp = project((adjusted_p_h - p_approx), mixed_space.sub(0).collapse())
         difp.rename("dif", "dif")
         output_file.write(difp, t)
-        # Relative error
-        difp_rel = project(conditional(gt(np.abs(adjusted_p_h - p_approx), dif_tolerance), (adjusted_p_h - p_approx)/adjusted_p_h, 0))
-        difp_rel.rename("dif_rel", "dif_rel")
-        output_file.write(difp_rel,t)
         # Compare flux to approximation
         dif_flux = project(flux - flux_approx, mixed_space.sub(1).collapse())
         dif_flux.rename("dif_flux", "dif_flux")
         output_file.write(dif_flux, t)
-        #Relative error in flux
-        dif_flux_rel = project(conditional(gt(np.abs(dot(flux - flux_approx,r1_vec)), dif_tolerance), (dot(flux - flux_approx,r1_vec)) / dot(flux,r1_vec), 0))
-        dif_flux_rel.rename("dif_flux_rel", "dif_flux_rel")
-        output_file.write(dif_flux_rel, t)
         # Update the solution for next iteration
         assign(p_old, p_h)
         t += dt
-
     # Try to compute flux over boundary
     total_flux = V1 * assemble(dot(flux, n) * 4 * pi * r1 ** 2 * ds(bottom))
     total_r1_flux = V1 * assemble(dot(flux, r1_matrix * n) * 4 * pi * r1 ** 2 * ds(bottom))
@@ -276,30 +265,18 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
 
 if __name__ == '__main__':
     # Concentration of C molecules.
-    c = [10]*12
-    print(c)
+    c = np.arange(1, 16, 1)
     # The name of the output file for the flux results. Not the numerical solution, see solve_problem_instance() for
     # that output file.
-    output_filename = 'gamma_test/gamma_testc10.npy'
+    output_filename = 'positive_test/pos_test'
     # The meshes to solve the problem for. Represented as an array to allow scanning through multiple problem instances.
-    mesh_filenames = ["exp_boundary_sigma0.1_gamma0.25_r1max5_r2max5", "exp_boundary_sigma0.1_gamma0.5_r1max5_r2max5",
-                      "exp_boundary_sigma0.1_gamma0.5_r1max5_r2max5", "exp_boundary_sigma0.1_gamma1_r1max5_r2max5",
-                      "exp_boundary_sigma0.1_gamma1.25_r1max5_r2max5", "exp_boundary_sigma0.1_gamma1.5_r1max5_r2max5",
-                      "exp_boundary_sigma0.1_gamma1.75_r1max5_r2max5", "exp_boundary_sigma0.1_gamma2_r1max5_r2max5",
-                      "exp_boundary_sigma0.1_gamma2.25_r1max5_r2max5", "exp_boundary_sigma0.1_gamma2.5_r1max5_r2max5",
-                      "exp_boundary_sigma0.1_gamma2.75_r1max5_r2max5", "exp_boundary_sigma0.1_gamma3_r1max5_r2max5"]
-
-    '''["exp_boundary_sigma0.025_gamma1_r1max5_r2max5", "exp_boundary_sigma0.05_gamma1_r1max5_r2max5",
-    "exp_boundary_sigma0.075_gamma1_r1max5_r2max5", "exp_boundary_sigma0.1_gamma1_r1max5_r2max5",
-    "exp_boundary_sigma0.125_gamma1_r1max5_r2max5", "exp_boundary_sigma0.15_gamma1_r1max5_r2max5",
-    "exp_boundary_sigma0.175_gamma1_r1max5_r2max5", "exp_boundary_sigma0.2_gamma1_r1max5_r2max5",
-    "exp_boundary_sigma0.225_gamma1_r1max5_r2max5", "exp_boundary_sigma0.25_gamma1_r1max5_r2max5"]'''
+    mesh_filenames = ["pos_boundary_sigma0.1_gamma1_r1max5_r2max5"]*len(c)
     # ******* Model constants ****** #
     # Sigma and gamma values must match the boundaries of the meshes in 'mesh_filenames'.
     #sigma_adjustments = np.load('corrections.npy')
     sigmas = [0.1]*len(c)
-    gammas = np.arange(0.25, 3.25, 0.25)
-    mesh_folder = "meshes/gamma_test/"
+    gammas = [1]*len(c)#np.arange(3.25, 5.25, 0.25)
+    mesh_folder = "meshes/positive_test/"
     # Dimensions of the mesh
     r1_max = [5]*len(c)
     r2_min = 0

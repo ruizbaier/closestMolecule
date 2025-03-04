@@ -111,6 +111,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     p_approx = 4*np.pi*r2**2*interpolate(p_steady_state, test_space)
     flux_approx = interpolate(p_flux_approx, test_space)
 
+
     # ********* Weak forms ********* #
     if not steady_state:
         # Time dependent weak form.
@@ -167,10 +168,11 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     print(f'r1 flux: {total_r1_flux} r2 flux: {total_r2_flux} total flux: {total_flux} approximate flux: '
           f'{total_approx_flux} error: {total_flux - total_approx_flux} sigma: {sigma} sigma sq: {sigma ** 2}')
     results.append([sigma, gamma, concentration, total_r1_flux, total_r2_flux, total_flux, total_approx_flux])
+    return p_h, q_h, q_dif
 
 
 def exp_reaction_boundary(sigma, gamma, r2_val):
-    return sigma*np.exp(-4/3*np.pi*gamma*np.power(r2_val, 3))
+    return sigma#*np.exp(-4/3*np.pi*gamma*np.power(r2_val, 3))
 
 
 def flat_reaction_boundary(r2_val):
@@ -271,9 +273,9 @@ class FluxApprox(UserExpression):
 if __name__ == '__main__':
     # The name of the output file for the flux results. Not the numerical solution, see solve_problem_instance() for
     # that output file.
-    output_filename = 'exp_test'
+    output_filename = 'flat_test'
     # The meshes to solve the problem for. Represented as an array to allow scanning through multiple problem instances.
-    mesh_filenames = ["exp_boundary_sigma0.1_gamma1"]
+    mesh_filenames = ["flat_boundary_sigma0.1_r1max_4"]
 
     # ******* Model constants ****** #
     # Sigma and gamma values must match the boundaries of the meshes in 'mesh_filenames'.
@@ -281,7 +283,7 @@ if __name__ == '__main__':
     gammas = [1]
     mesh_folder = "meshes/"
     # Dimensions of the mesh
-    r1_max = 5
+    r1_max = 4
     r2_min = 0
     r2_max = 5
     R = r1_max
