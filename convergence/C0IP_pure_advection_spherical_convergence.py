@@ -101,14 +101,14 @@ for nk in range(nkmax):
 
     # ********* boundary conditions (Essential) ******** #
 
-    bcQ = DirichletBC(Vh, q_ex, bdry, inlet)
+    bcQ = DirichletBC(Vh, q_ex, bdry, outlet)
 
     # ********* Weak forms ********* #
     beta = Constant(1)#sqrt(abs(dot(r2vec,n('+'))))
     
     lhs = (q - div_rad(r2vec)*q)*w*weight*dx \
         - dot(r2vec,grad(w))*q*weight*dx \
-        + dot(r2vec,n)*q*w*weight*ds(outlet) \
+        + dot(r2vec,n)*q*w*weight*ds(inlet) \
         + dot(r2vec,n)*q*w*weight*ds(char) \
         + stab/(deg+1)**3.5*avg(he)**2*beta*dot(jump(grad(q)),n('+'))*dot(jump(grad(w)),n('+'))*weight*dS
     

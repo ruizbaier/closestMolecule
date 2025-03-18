@@ -22,6 +22,7 @@ mixed for s-p and C0IP for q (as in Burman-Ern 07)
 '''
 
 from fenics import *
+import numpy as np
 parameters["form_compiler"]["representation"] = "uflacs"
 parameters["form_compiler"]["cpp_optimize"] = True
 parameters["form_compiler"]["quadrature_degree"] = 4
@@ -43,21 +44,30 @@ def div_rad(vec):
     return Dx(r2**2*vec[0],0)/r2**2 + Dx(r1**2*vec[1],1)/r1**2
 
 def G(p,q):
-    return D2*4*pi*r2**2*p**2/(q+DOLFIN_EPS)/density*r2vec
+    return r2**2*p**2/(q+DOLFIN_EPS)*r2vec
+
+def Gstar(p, q, c, r2):
+    """
+    The correct non-linear term is (r2*p)^2/q but for sufficiently large r2 this limits to 4*np.pi*c*p*r2**2.
+    Using this approximation avoids the floating point errors that arise from computing (r2*p)^2/q when p and q are
+    very small.
+    """
+    return conditional(gt(abs(1/(4*c*np.pi)*p - q), 0.001), (p/q)*p*r2**2, 4*np.pi*c*p*r2**2)
 
 # ******* Exact solutions and forcing terms for error analysis ****** #
 
 p_str = 'sin(pi*x)*sin(pi*y)'
 q_str = '1.5+cos(pi*x*y)'
+s_str = 'pi*sin(pi*x)'
 
-D1 = Constant(1e-3)
-D2 = Constant(1.5e-3)
+D1 = Constant(.01)
+D2 = Constant(0.015)
 D = Constant(((D2,0),(0,D1)))
 r2vec = Constant((1,0))
 density = Constant(1.)
-stab = Constant(0.0075)
+stab = Constant(0.00075)
 
-deg=1; nkmax = 5
+deg=1; nkmax = 6
 
 hh = []; nn = [] 
 ep = []; rp = []
@@ -75,10 +85,15 @@ for nk in range(nkmax):
     mesh = RectangleMesh(Point(0,0),Point(1,1),nps,nps)
     bdry = MeshFunction("size_t", mesh, 1)
     bdry.set_all(0)
-    left = 31; rest= 32
+    left = 31
+    right = 32
+    rest = 33
     GLeft = CompiledSubDomain("near(x[0],0) && on_boundary")
-    GRest = CompiledSubDomain("(near(x[0],1) || near(x[1],0) || near(x[1],1)) && on_boundary")
-    GLeft.mark(bdry,left); GRest.mark(bdry,rest)
+    GRight = CompiledSubDomain("near(x[0],1) && on_boundary")
+    GRest = CompiledSubDomain("(near(x[1],0) || near(x[1],1)) && on_boundary")
+    GLeft.mark(bdry, left)
+    GRight.mark(bdry, right)
+    GRest.mark(bdry, rest)
     ds = Measure("ds", subdomain_data = bdry)
     hK = CellDiameter(mesh)
     n = FacetNormal(mesh)
@@ -109,13 +124,16 @@ for nk in range(nkmax):
     
     p_ex    = Expression(str2exp(p_str), degree=5, domain=mesh)
     q_ex    = Expression(str2exp(q_str), degree=5, domain=mesh)
+    s_ex    = Expression((0, str2exp(s_str)), degree=5, domain=mesh)
     sig_ex  = -grad(p_ex) - G(p_ex,q_ex)
     f2_ex   = div_rad(D*sig_ex)
     f3_ex   = dot(grad(q_ex),r2vec)  + r2**2*p_ex 
 
     # ********* boundary conditions (Essential) ******** #
     # p = p_ex (natural) everywhere, and q=q_ex (essential) on the inlet BC: left
-    bcQ = DirichletBC(Vh.sub(2), q_ex, bdry, left)
+    bcQ = DirichletBC(Vh.sub(2), q_ex, bdry, right)
+    bcS = DirichletBC(Vh.sub(0), s_ex, bdry, left)
+    bcs = [bcQ, bcS]
 
     beta = Constant(1.)
     
@@ -125,8 +143,8 @@ for nk in range(nkmax):
             - v*div_rad(D*sig)*weight*dx  \
             + (- div_rad(r2vec)*q + r2**2*p)*w*weight*dx \
             - dot(r2vec,grad(w))*q*weight*dx \
-            + dot(r2vec,n)*q*w*weight*ds(rest) \
-            + stab/(deg+1)**3.5*avg(hK)**2*beta*dot(jump(grad(q)),n('+'))*dot(jump(grad(w)),n('+'))*weight*dS
+            + dot(r2vec,n)*q*w*weight*ds(left) \
+            - stab/(deg+1)**3.5*avg(hK)**2*beta*dot(jump(grad(q)),n('+'))*dot(jump(grad(w)),n('+'))*weight*dS
     
     rhs  = - p_ex*dot(tau,n)*weight*ds \
             - f2_ex*v*weight*dx \
@@ -135,10 +153,10 @@ for nk in range(nkmax):
     FF = lhs - rhs
 
     Tang = derivative(FF,u,du)
-    problem = NonlinearVariationalProblem(FF, u, J=Tang, bcs = bcQ)
+    problem = NonlinearVariationalProblem(FF, u, J=Tang, bcs = bcs)
     solver  = NonlinearVariationalSolver(problem)
     solver.parameters['nonlinear_solver']                    = 'newton'
-    solver.parameters['newton_solver']['linear_solver']      = 'umfpack'
+    solver.parameters['newton_solver']['linear_solver']      = 'mumps'
     solver.parameters['newton_solver']['absolute_tolerance'] = 1e-8
     solver.parameters['newton_solver']['relative_tolerance'] = 1e-8
 

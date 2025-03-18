@@ -26,6 +26,13 @@ def Gstar(p, q, c, r2):
     return conditional(gt(abs(1/(4*c*np.pi)*p - q), 0.001), (p/q)*p*r2**2, 4*np.pi*c*p*r2**2)
 
 
+def div_rad(vec, r1, r2):
+    return Dx(r2**2*vec[0],0)/r2**2 + Dx(r1**2*vec[1],1)/r1**2
+
+def G(p, q, r2):
+    return r2**2*p**2/(q+DOLFIN_EPS)
+
+
 class PInitial(UserExpression):
     """
     Custom expression to avoid the issues Fenics seems to have with exp().
@@ -120,12 +127,18 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     """
     r2, r1 = SpatialCoordinate(mesh)
     n = FacetNormal(mesh)
+    hK = CellDiameter(mesh)
     weight = (4 * pi * r1 * r2) ** 2
     r2_vec = Constant((1, 0))
     r1_vec = Constant((0, 1))
     r1_matrix = as_tensor([[0, 0], [0, 1]])
     r2_matrix = as_tensor([[1, 0], [0, 0]])
-    dMatrix = as_tensor([[D2, 0], [0, D1]])
+    D = as_tensor([[D2, 0], [0, D1]])
+    stab = Constant(0.001)
+    deg = 2
+    beta = 1
+    alpha = 7/2
+    stab_factor = stab / (deg + 1) ** alpha * avg(hK) ** 2 * beta
 
     # mesh labels
     right = 21
@@ -134,14 +147,13 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     bottom = 24
 
     # ******** Finite dimensional spaces ******** #
-    deg = 2
-    P0 = FiniteElement('DG', mesh.ufl_cell(), deg - 1)
-    RT1 = FiniteElement('RT', mesh.ufl_cell(), deg)
-    P1 = FiniteElement('CG', mesh.ufl_cell(), deg)
+    P0 = FiniteElement('DG', mesh.ufl_cell(), deg)
+    RT1 = FiniteElement('RT', mesh.ufl_cell(), deg + 1)
+    P1 = FiniteElement('CG', mesh.ufl_cell(), deg + 1)
     mixed_space = FunctionSpace(mesh, MixedElement([P0, RT1, P1]))
 
     # ******** Initialise output file ******** #
-    output_file = XDMFFile(f"exp_boundary_mixed_c{concentration}_sigma{sigma:.2f}_gamma{gamma:.2f}_deg{deg}.xdmf")
+    output_file = XDMFFile(f"exp_boundary_convergence_c{concentration}_sigma{sigma:.2f}_gamma{gamma:.2f}_deg{deg}.xdmf")
     output_file.parameters['rewrite_function_mesh'] = False
     output_file.parameters["flush_output"] = True
     output_file.parameters["functions_share_mesh"] = True
@@ -150,15 +162,15 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         t_final = 0
     t = 0
     # ********* test and trial functions ******** #
-    v1, tau, v2 = TestFunctions(mixed_space)
+    v, tau, w = TestFunctions(mixed_space)
     u = Function(mixed_space)
     du = TrialFunction(mixed_space)
     p, s, q = split(u)
 
     # ********* initial and boundary conditions ******** #
     # ********* initial and boundary conditions ******** #
-    p_initial = PInitial(concentration, sigma, gamma, V1, degree=deg-1)
-    q_initial = QInitial(concentration, V1, degree=deg)
+    p_initial = PInitial(concentration, sigma, gamma, V1, degree=deg)
+    q_initial = QInitial(concentration, V1, degree=deg+1)
 
     p_old = interpolate(p_initial, mixed_space.sub(0).collapse())
 
@@ -166,7 +178,6 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     # for the flux becomes essential (dirichlet)
     p_right = p_initial
     p_top = p_initial
-    p_bottom_boundary_condition = DirichletBC(mixed_space.sub(0), Constant(0), bdry, bottom)
 
     # Boundary conditions for s are complementary to those of p:
     #s_left = SInitial(concentration, sigma, gamma, V1)
@@ -179,51 +190,69 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     q_right_boundary_condition = DirichletBC(mixed_space.sub(2), q_right, bdry, right)
 
     # here we only list the Dirichlet conditions
-    bc = [s_left_boundary_condition, q_right_boundary_condition, p_bottom_boundary_condition]
+    bc = [s_left_boundary_condition, q_right_boundary_condition]
     ds = Measure('ds', domain=mesh, subdomain_data=bdry)
 
     # ********* Weak forms ********* #
+    beta = Constant(1.)
     if not steady_state:
         # Time dependent weak form.
-        FF = (p - p_old) / dt * v1 * weight * dx \
+        FF = (p - p_old) / dt * v * weight * dx \
              + ((D1 / r1 ** 2) * Dx(r1 ** 2 * (dot(s, r1_vec)), 1) + (D2 / r2 ** 2) * Dx(r2 ** 2 * (dot(s, r2_vec)),
-                                                                                         0)) * v1 * weight * dx \
+                                                                                         0)) * v * weight * dx \
              + dot(s + (Gstar(p, q, concentration, r2) * r2_vec), tau) * weight * dx \
              - p * ((1 / r1 ** 2) * Dx(r1 ** 2 * (dot(tau, r1_vec)), 1) + (1 / r2 ** 2) * Dx(
             r2 ** 2 * (dot(tau, r2_vec)), 0)) * weight * dx \
              + p_right * dot(tau, n) * weight * ds(right) \
              + p_top * dot(tau, n) * weight * ds(top) \
-             + Dx(q, 0) * v2 * weight * dx + r2 ** 2 * p * v2 * weight * dx
+             + Dx(q, 0) * w * weight * dx + r2 ** 2 * p * w * weight * dx
 
         # Last term is from the boundary condition for q which states dq/dr2 = 0 on the inner boundary.
     else:
         # Steady-state weak form.
+        '''
         FF = ((D1 / r1 ** 2) * Dx(r1 ** 2 * (dot(s, r1_vec)), 1) + (D2 / r2 ** 2) * Dx(r2 ** 2 * (dot(s, r2_vec)),
-                                                                                         0)) * v1 * weight * dx \
+                                                                                         0)) * v * weight * dx \
              + dot(s + (Gstar(p, q, concentration, r2) * r2_vec), tau) * weight * dx \
              - p * ((1 / r1 ** 2) * Dx(r1 ** 2 * (dot(tau, r1_vec)), 1) + (1 / r2 ** 2) * Dx(
             r2 ** 2 * (dot(tau, r2_vec)), 0)) * weight * dx \
              + p_right * dot(tau, n) * weight * ds(right) \
              + p_top * dot(tau, n) * weight * ds(top) \
-             + Dx(q, 0) * v2 * weight * dx + r2 ** 2 * p * v2 * weight * dx
+             + Dx(q, 0) * w * weight * dx + r2 ** 2 * p * w * weight * dx
+        '''
+        # ********* Weak forms ********* #
+        lhs = dot(s + (Gstar(p, q, concentration, r2)*r2_vec), tau) * weight * dx \
+              - p * div_rad(tau, r1, r2) * weight * dx \
+              - v * div_rad(D * s, r1, r2) * weight * dx \
+              + p_right * dot(tau, n) * weight * ds(right) \
+              + p_top * dot(tau, n) * weight * ds(top) \
+              + (r2 ** 2 * p) * w * weight * dx \
+              - Dx(w,0) * q * weight * dx \
+              - 2*r2*q * w * (4*np.pi)**2*r1**2*dx \
+              + dot(r2_vec, n) * q * w * weight * ds(left)
+              #+ stab_factor * dot(jump(grad(q)), n('+')) * dot(jump(grad(w)), n('+')) * weight * dS\
 
-    # Initialise solver
+
+
+        rhs = 0
+
+        FF = lhs - rhs
+
     Tang = derivative(FF, u, du)
     problem = NonlinearVariationalProblem(FF, u, J=Tang, bcs=bc)
     solver = NonlinearVariationalSolver(problem)
-    solver_type = 'newton'
-    solver.parameters['nonlinear_solver'] = solver_type
-    solver.parameters[solver_type + '_solver']['linear_solver'] = 'mumps'
-    solver.parameters[solver_type + '_solver']['absolute_tolerance'] = 1e-9
-    solver.parameters[solver_type + '_solver']['relative_tolerance'] = 1e-9
-    solver.parameters[solver_type + '_solver']['maximum_iterations'] = 10
+    solver.parameters['nonlinear_solver'] = 'newton'
+    solver.parameters['newton_solver']['linear_solver'] = 'mumps'
+    solver.parameters['newton_solver']['absolute_tolerance'] = 1e-8
+    solver.parameters['newton_solver']['relative_tolerance'] = 1e-8
+    solver.parameters['newton_solver']['maximum_iterations'] = 10
 
     # (approximate) steady-state solution used for comparison
-    p_steady_state = PInitial(concentration, sigma, gamma, V1, degree=deg-1)
-    p_flux_approx = SInitial(concentration, sigma, gamma, V1, degree=deg)
+    p_steady_state = PInitial(concentration, sigma, gamma, V1, degree=deg)
+    p_flux_approx = SInitial(concentration, sigma, gamma, V1, degree=deg+1)
 
     p_approx = 4 * np.pi * r2 ** 2 * interpolate(p_steady_state, mixed_space.sub(0).collapse())
-    flux_approx = dMatrix*4 * np.pi * r2 ** 2 *interpolate(p_flux_approx, mixed_space.sub(1).collapse())
+    flux_approx = D*4 * np.pi * r2 ** 2 *interpolate(p_flux_approx, mixed_space.sub(1).collapse())
     while (t <= t_final):
         print("t=%.3f" % t)
         solver.solve()
@@ -231,10 +260,10 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         adjusted_p_h = project(4*np.pi*r2**2*conditional(gt(p_h, 0), p_h, 0), mixed_space.sub(0).collapse())
         adjusted_q_h = project(conditional(gt(q_h, 0), q_h, 0), mixed_space.sub(2).collapse())
         # Compute flux
-        flux = project(dMatrix*4*np.pi*r2**2*s_h, mixed_space.sub(1).collapse())
+        flux = project(D*4*np.pi*r2**2*s_h, mixed_space.sub(1).collapse())
         # Save the actual solution
         adjusted_p_h.rename("p", "p")
-        adjusted_q_h.rename("q", "q")
+        q_h.rename("q", "q")
         flux.rename("flux", "flux")
         output_file.write(adjusted_p_h, t)
         output_file.write(adjusted_q_h, t)
@@ -265,25 +294,25 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
 
 if __name__ == '__main__':
     # Concentration of C molecules.
-    c = np.arange(1, 16, 1)
+    c = [10]
     # The name of the output file for the flux results. Not the numerical solution, see solve_problem_instance() for
     # that output file.
-    output_filename = 'positive_test/pos_test'
+    output_filename = 'convergence_test'
     # The meshes to solve the problem for. Represented as an array to allow scanning through multiple problem instances.
-    mesh_filenames = ["pos_boundary_sigma0.1_gamma1_r1max5_r2max5"]*len(c)
+    mesh_filenames = ["exp_boundary_sigma0.1_gamma1_r1max5_r2max5"]*len(c)
     # ******* Model constants ****** #
     # Sigma and gamma values must match the boundaries of the meshes in 'mesh_filenames'.
     #sigma_adjustments = np.load('corrections.npy')
     sigmas = [0.1]*len(c)
     gammas = [1]*len(c)#np.arange(3.25, 5.25, 0.25)
-    mesh_folder = "meshes/positive_test/"
+    mesh_folder = "meshes/"
     # Dimensions of the mesh
     r1_max = [5]*len(c)
     r2_min = 0
     r2_max = [5]*len(c)
     R = r1_max
     # Diffusion coefficients.
-    D_BASE = 1
+    D_BASE = 0.001
     D1 = 2 * D_BASE
     D2 = 1.5 * D_BASE
     # ********** Time constants ********* #
