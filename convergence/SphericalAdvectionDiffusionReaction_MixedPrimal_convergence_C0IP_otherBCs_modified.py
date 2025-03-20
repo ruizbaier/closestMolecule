@@ -32,7 +32,7 @@ RHS += (h*min(0,rvec.n)^2 + \gamma*eps^2/h)*q_ex*w * ds(right)
 from fenics import *
 parameters["form_compiler"]["representation"] = "uflacs"
 parameters["form_compiler"]["cpp_optimize"] = True
-parameters["form_compiler"]["quadrature_degree"] = 4
+parameters["form_compiler"]["quadrature_degree"] = 6
 
 # needed for convergence studies (with manufactured solutions)
 import sympy2fenics as sf
@@ -65,7 +65,7 @@ D1 = Constant(1)
 D2 = Constant(1.5)
 D = Constant(((D2,0),(0,D1)))
 r2vec = Constant((1,0))
-stab = Constant(1.e-5) #0.00075 for k =0
+stab = Constant(1.e-4) #0.00075 for k =0
 
 deg=0; nkmax = 6
 
@@ -86,12 +86,12 @@ for nk in range(nkmax):
     bdry = MeshFunction("size_t", mesh, 1)
     bdry.set_all(0)
     left = 30; right = 31; rest= 32
-    GRight = CompiledSubDomain("near(x[0],1) && on_boundary")
     GLeft = CompiledSubDomain("near(x[0],0) && on_boundary")
+    GRight = CompiledSubDomain("near(x[0],1) && on_boundary")
     GRest = CompiledSubDomain("(near(x[1],0) || near(x[1],1)) && on_boundary")
     GLeft.mark(bdry,left); GRight.mark(bdry,right); GRest.mark(bdry,rest)
     ds = Measure("ds", subdomain_data = bdry)
-    hK = CellDiameter(mesh)
+    hK = FacetArea(mesh)#CellDiameter(mesh)
     n = FacetNormal(mesh)
     r2, r1 = SpatialCoordinate(mesh)
     weight = (4 * pi * r1 * r2) ** 2
@@ -118,8 +118,8 @@ for nk in range(nkmax):
     
     # ********* instantiation of exact solutions ****** #
     
-    p_ex    = Expression(str2exp(p_str), degree=5, domain=mesh)
-    q_ex    = Expression(str2exp(q_str), degree=5, domain=mesh)
+    p_ex    = Expression(str2exp(p_str), degree=6+deg, domain=mesh)
+    q_ex    = Expression(str2exp(q_str), degree=6+deg, domain=mesh)
     sig_ex  = -grad(p_ex) - G(p_ex,q_ex)
     f2_ex   = div_rad(D*sig_ex)
     f3_ex   = dot(grad(q_ex),r2vec)  + r2**2*p_ex 
@@ -137,7 +137,7 @@ for nk in range(nkmax):
             + (-div_rad(r2vec)*q + r2**2*p)*w*weight*dx \
             - dot(r2vec,grad(w))*q*weight*dx \
             + dot(r2vec,n)*q*w*weight*ds(left) \
-            + stab/(deg+1)**3.5*avg(hK)**2*beta*dot(jump(grad(q)),n('+'))*dot(jump(grad(w)),n('+'))*weight*dS 
+            + stab/(deg+1)**3.5*avg(hK)**2*beta*dot(jump(grad(q)),n('+'))*dot(jump(grad(w)),n('+'))*weight*dS
     
     
     rhs  = - p_ex*dot(tau,n)*weight*ds(right) \
