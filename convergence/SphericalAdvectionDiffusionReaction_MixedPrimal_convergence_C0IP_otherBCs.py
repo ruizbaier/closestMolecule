@@ -45,21 +45,21 @@ def div_rad(vec):
     return Dx(r2**2*vec[0],0)/r2**2 + Dx(r1**2*vec[1],1)/r1**2
 
 def G(p,q):
-    return D2*4*pi*r2**2*p**2/(q+DOLFIN_EPS)/density*Constant((1,0))
+    return r2**2*p**2*Constant((1,0))/(q+DOLFIN_EPS)
 
 # ******* Exact solutions and forcing terms for error analysis ****** #
 
 p_str = 'sin(pi*x)*sin(pi*y)'
 q_str = '1.5+cos(pi*x*y)'
 
-D1 = Constant(1e-3)
-D2 = Constant(1.5e-3)
+D1 = 2.0
+D2 = 1.5
 D = Constant(((D2,0),(0,D1)))
 r2vec = Constant((-1,0))
 density = Constant(1.)
-stab = Constant(0.00075)
+stab = Constant(0.0075)
 
-deg=0; nkmax = 7
+deg=1; nkmax = 6
 
 hh = []; nn = [] 
 ep = []; rp = []
@@ -130,7 +130,7 @@ for nk in range(nkmax):
             - v*div_rad(D*sig)*weight*dx  \
             + (- div_rad(r2vec)*q + r2**2*p)*w*weight*dx \
             - dot(r2vec,grad(w))*q*weight*dx \
-            + dot(r2vec,n)*q*w*weight*ds(rest) \
+            + dot(r2vec,n)*q*w*weight*ds(left) \
             + stab/(deg+1)**3.5*avg(hK)**2*beta*dot(jump(grad(q)),n('+'))*dot(jump(grad(w)),n('+'))*weight*dS
     
     rhs  = - p_ex*dot(tau,n)*weight*ds(right) \

@@ -210,7 +210,6 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
         # Last term is from the boundary condition for q which states dq/dr2 = 0 on the inner boundary.
     else:
         # Steady-state weak form.
-        '''
         FF = ((D1 / r1 ** 2) * Dx(r1 ** 2 * (dot(s, r1_vec)), 1) + (D2 / r2 ** 2) * Dx(r2 ** 2 * (dot(s, r2_vec)),
                                                                                          0)) * v * weight * dx \
              + dot(s + (Gstar(p, q, concentration, r2) * r2_vec), tau) * weight * dx \
@@ -219,24 +218,6 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
              + p_right * dot(tau, n) * weight * ds(right) \
              + p_top * dot(tau, n) * weight * ds(top) \
              + Dx(q, 0) * w * weight * dx + r2 ** 2 * p * w * weight * dx
-        '''
-        # ********* Weak forms ********* #
-        lhs = dot(s + (Gstar(p, q, concentration, r2)*r2_vec), tau) * weight * dx \
-              - p * div_rad(tau, r1, r2) * weight * dx \
-              - v * div_rad(D * s, r1, r2) * weight * dx \
-              + p_right * dot(tau, n) * weight * ds(right) \
-              + p_top * dot(tau, n) * weight * ds(top) \
-              + (r2 ** 2 * p) * w * weight * dx \
-              - Dx(w,0) * q * weight * dx \
-              - 2*r2*q * w * (4*np.pi)**2*r1**2*dx \
-              + dot(r2_vec, n) * q * w * weight * ds(left)
-              #+ stab_factor * dot(jump(grad(q)), n('+')) * dot(jump(grad(w)), n('+')) * weight * dS\
-
-
-
-        rhs = 0
-
-        FF = lhs - rhs
 
     Tang = derivative(FF, u, du)
     problem = NonlinearVariationalProblem(FF, u, J=Tang, bcs=bc)
@@ -286,7 +267,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     total_approx_flux = 4*np.pi*D1*sigma*(concentration/(gamma+concentration))
 
     print(f'r1 flux: {total_r1_flux} r2 flux: {total_r2_flux} total flux: {total_flux} approximate flux: '
-          f'{total_approx_flux} error: {total_flux - total_approx_flux} sigma: {sigma} sigma sq: {sigma ** 2}')
+          f'{total_approx_flux} error: {total_flux - total_approx_flux} sigma: {sigma} sigma sq: {sigma ** 2} expected flux: {4*np.pi*2*0.1*concentration/(concentration+1)}')
     results.append([sigma, gamma, concentration, total_r1_flux, total_r2_flux, total_flux, total_approx_flux])
     return flux, total_flux
 
@@ -294,17 +275,17 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
 
 if __name__ == '__main__':
     # Concentration of C molecules.
-    c = [10]
+    c = np.arange(1, 21, 1)
     # The name of the output file for the flux results. Not the numerical solution, see solve_problem_instance() for
     # that output file.
-    output_filename = 'convergence_test'
+    output_filename = 'final_test1'
     # The meshes to solve the problem for. Represented as an array to allow scanning through multiple problem instances.
-    mesh_filenames = ["exp_boundary_sigma0.1_gamma1_r1max5_r2max5"]*len(c)
+    mesh_filenames = ["exp_boundary_sigma0.101_gamma1.19_r1max5_r2max5"]*len(c)
     # ******* Model constants ****** #
     # Sigma and gamma values must match the boundaries of the meshes in 'mesh_filenames'.
     #sigma_adjustments = np.load('corrections.npy')
-    sigmas = [0.1]*len(c)
-    gammas = [1]*len(c)#np.arange(3.25, 5.25, 0.25)
+    sigmas = [0.101]*len(c)
+    gammas = [1.19]*len(c)#np.arange(3.25, 5.25, 0.25)
     mesh_folder = "meshes/"
     # Dimensions of the mesh
     r1_max = [5]*len(c)
@@ -312,7 +293,7 @@ if __name__ == '__main__':
     r2_max = [5]*len(c)
     R = r1_max
     # Diffusion coefficients.
-    D_BASE = 0.001
+    D_BASE = 1
     D1 = 2 * D_BASE
     D2 = 1.5 * D_BASE
     # ********** Time constants ********* #

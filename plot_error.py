@@ -18,7 +18,7 @@ def required_rate(conc, sigma, gamma):
     return 4*np.pi*2*sigma*(conc/(conc + gamma))
 
 def required_rate_pos(conc, sigma, gamma):
-    return 4*np.pi*2*sigma*(1/(conc + gamma))
+    return 4*np.pi*2*sigma*(conc/(conc + gamma))
 
 def adjustment_sigma(sigma, rate_change, a, b):
     return (1/(2*a))*(2*sigma*a + b - np.sqrt(np.square(2*sigma*a + b) - 4*a*rate_change))
@@ -32,7 +32,7 @@ size = 24
 params = {'axes.labelsize': size, 'axes.titlesize': size, 'legend.fontsize': size,
           'xtick.labelsize': size, 'ytick.labelsize': size}
 matplotlib.rcParams.update(params)
-data = np.load('positive_test/pos_test.npy')
+data = np.load('concentration_test/uncorrected_final.npy')
 #adjusted_data = np.load('boundary_condition_test/flat_test_first_order_boundary.npy')
 #data = data[data[:, 1].argsort()]
 #data2 = np.load('gamma_test2.npy')
