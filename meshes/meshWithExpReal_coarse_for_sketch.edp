@@ -1,0 +1,56 @@
+//load "msh3";
+load "medit";
+load "iovtk";
+//Prints command line arguments, arguments are ["FreeFem++", "filename", "sigma", "gamma"]
+//for (int i = 0; i < ARGV.n; i++)
+//    cout << ARGV[i] << endl;
+
+real sigma = 0.101, infx = 5, infy = 5, gamma = 1.19 , fend = sigma*(exp(-4./3.*pi*gamma*infx^3));
+
+int right = 21, top=22, left = 23, bottom = 24;
+
+border b1(t=fend,infy){x=infx;y=t;label=right;};
+border b2(t=infx,0.){x=t;y=infy;label=top;};
+border b3(t=infy,sigma){x=0;y=t;label=left;};
+border b4(t=0,infx){x=t;y=sigma*(exp(-4./3.*pi*gamma*t^3));label=bottom;};
+
+
+int nps = 75;
+mesh Th=buildmesh(b1(nps)+b2(nps)+b3(nps)+b4(5*nps));
+
+func fx = 1.0/(0.03+y/3+0.02*x*y)^0.3; //log(y+0.2);
+fespace Vh(Th,P1);
+Vh u,v, fh = fx;
+
+//plot(Th,fh,wait=true);
+
+Th = adaptmesh(Th,fx,IsMetric=0,iso=1,hmax=0.1, hmin=0.025,keepbackvertices=0,nbsmooth=100,nbvx=80000);
+
+savemesh(Th,"exp_for_sketch.mesh");
+
+
+plot(Th);
+
+
+
+
+
+
+// Function
+func f = 1;
+
+// Problem
+problem Poisson(u, v, solver=CG, eps=1.e-6)
+    = int2d(Th)(
+		0.01*(dx(u)*dx(v)
+		 + dy(u)*dy(v))
+    )
+    - int2d(Th)(
+          f*v
+    )
+  + on(bottom, u=10) + on(top, u=0) + on(left, u=0) + on(right, u=0) ;
+Poisson;
+
+//plot(u,wait=true);
+
+savevtk("mesh_for_sketch.vtk",Th,u, dataname="u");
