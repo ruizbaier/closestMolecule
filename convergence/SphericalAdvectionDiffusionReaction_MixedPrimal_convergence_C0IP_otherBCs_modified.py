@@ -73,7 +73,7 @@ D1 = Constant(2)
 D2 = Constant(1.5)
 D = Constant(((D2, 0), (0, D1)))
 r2vec = Constant((1, 0))
-stab = Constant(1.e-5)  # 0.00075 for k =0
+stab = Constant(1.e-3)  # 0.00075 for k =0
 
 deg = 1
 nkmax = 6

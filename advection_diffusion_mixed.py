@@ -97,7 +97,8 @@ class QInitial(UserExpression):
         return ()
 
 
-def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma, results, V1, D1, D2, steady_state = False):
+def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma, results, V1, D1, D2, output_filename,
+                           steady_state = False):
     """
     Solves a specific instance of the problem. Writes the numerical solution to an xdmf file
     and returns some flux calculations in the 'results' array.
@@ -122,6 +123,8 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     results: list[float]
         Initially empty this list is populated with the flux computations (namely the net flux over the bottom boundary)
         at the end of the computation.
+    output_filename: str
+        The filename to write the finite element solution to.
     steady_state: bool
         Whether to solve the steady-state problem or not.
     """
@@ -153,7 +156,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     mixed_space = FunctionSpace(mesh, MixedElement([P0, RT1, P1]))
 
     # ******** Initialise output file ******** #
-    output_file = XDMFFile(f"exp_boundary_convergence_c{concentration}_sigma{sigma:.2f}_gamma{gamma:.2f}_deg{deg}.xdmf")
+    output_file = XDMFFile(output_filename)
     output_file.parameters['rewrite_function_mesh'] = False
     output_file.parameters["flush_output"] = True
     output_file.parameters["functions_share_mesh"] = True
@@ -275,17 +278,17 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
 
 if __name__ == '__main__':
     # Concentration of C molecules.
-    c = np.arange(1, 21, 1)
+    c = np.arange(1, 10, 1)
     # The name of the output file for the flux results. Not the numerical solution, see solve_problem_instance() for
     # that output file.
-    output_filename = 'final_test1'
+    output_filename = 'corrections/FE_particle/particle_test_finite_correction'
     # The meshes to solve the problem for. Represented as an array to allow scanning through multiple problem instances.
-    mesh_filenames = ["exp_boundary_sigma0.101_gamma1.19_r1max5_r2max5"]*len(c)
+    mesh_filenames = ["exp_boundary_sigma0.184_gamma2.73_r1max5_r2max5"]*len(c)
     # ******* Model constants ****** #
     # Sigma and gamma values must match the boundaries of the meshes in 'mesh_filenames'.
     #sigma_adjustments = np.load('corrections.npy')
-    sigmas = [0.101]*len(c)
-    gammas = [1.19]*len(c)#np.arange(3.25, 5.25, 0.25)
+    sigmas = [0.184]*len(c)
+    gammas = [2.73]*len(c)#np.arange(3.25, 5.25, 0.25)
     mesh_folder = "meshes/"
     # Dimensions of the mesh
     r1_max = [5]*len(c)
@@ -315,7 +318,8 @@ if __name__ == '__main__':
         mesh = Mesh(mesh_folder + mesh_filename + ".xml")
         bdry = MeshFunction("size_t", mesh, mesh_folder + mesh_filename + "_facet_region.xml")
         # Solve problem
-        solve_problem_instance(c[i], t_final, dt, mesh, bdry, sigma, gamma, results, V1, D1, D2, steady_state)
+        finite_element_filename = f'exp_boundary_convergence_c{c[i]}_sigma{sigma:.2f}_gamma{gamma:.2f}.xdmf'
+        solve_problem_instance(c[i], t_final, dt, mesh, bdry, sigma, gamma, results, V1, D1, D2, finite_element_filename, steady_state)
         print(results)
         results = np.array(results)
         if len(mesh_filenames) > 0:

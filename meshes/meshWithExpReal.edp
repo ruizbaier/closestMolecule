@@ -4,7 +4,7 @@ load "medit";
 //for (int i = 0; i < ARGV.n; i++)
 //    cout << ARGV[i] << endl;
 
-real sigma = 0.101, infx = 5, infy = 5, gamma = 1.19 , fend = sigma*(exp(-4./3.*pi*gamma*infx^3));
+real sigma = 0.2, infx = 5, infy = 5, gamma = 3 , fend = sigma*(exp(-4./3.*pi*gamma*infx^3));
 
 int right = 21, top=22, left = 23, bottom = 24;
 
@@ -21,7 +21,7 @@ plot(Th);
 
 Th = adaptmesh(Th,region,iso=1,hmax=0.0275, hmin=0.01,keepbackvertices=0,nbsmooth=110,nbvx=110000);
 
-savemesh(Th,"exp_boundary_sigma0.101_gamma1.19_r1max5_r2max5.mesh");
+savemesh(Th,"exp_boundary_sigma0.2_gamma3_r1max5_r2max5.mesh");
 
 
 plot(Th);

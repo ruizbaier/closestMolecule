@@ -1,6 +1,6 @@
 import gmsh
 folder = ""
-filenames = ["exp_boundary_sigma0.101_gamma1.19_r1max5_r2max5.mesh"]
+filenames = ["exp_boundary_sigma0.2_gamma3_r1max5_r2max5.mesh", "exp_boundary_sigma0.2_gamma3.3_r1max5_r2max5.mesh"]
 for file in filenames:
     gmsh.initialize()
     gmsh.merge(folder + file) # or gmsh.open

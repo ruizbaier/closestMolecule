@@ -17,22 +17,40 @@ def flux_func(x, b):
 def required_rate(conc, sigma, gamma):
     return 4*np.pi*2*sigma*(conc/(conc + gamma))
 
+
 def required_rate_pos(conc, sigma, gamma):
     return 4*np.pi*2*sigma*(conc/(conc + gamma))
 
+
 def adjustment_sigma(sigma, rate_change, a, b):
     return (1/(2*a))*(2*sigma*a + b - np.sqrt(np.square(2*sigma*a + b) - 4*a*rate_change))
+
+
+def convert_rate_to_mean(reaction_rate):
+    return 1/reaction_rate
+
+
+def calculate_num_sims(reaction_rates, expected_rates):
+    expected_means = 1/expected_rates
+    expected_variance = expected_means
+    sample_means = 1/reaction_rates
+    # sd sqrt(2*var/N), z = (mean1 - mean2)/sd
+    z = 2
+    # (delta mean)^2 = z*sd = z^2*2*var/N => N = 2*z^2*var/(delta mean)^2
+    Ns = 2*z**2*expected_variance/(sample_means - expected_means)**2
+    return Ns
+
 
 
 plt.rcParams.update({"text.usetex":True})
 rc('text', usetex=True)
 rc('font', family='serif', weight='bold')
 plt.rc('text.latex', preamble=r'\usepackage{amsmath}')
-size = 24
-params = {'axes.labelsize': size, 'axes.titlesize': size, 'legend.fontsize': size,
-          'xtick.labelsize': size, 'ytick.labelsize': size}
+fig_size = 24
+params = {'axes.labelsize': fig_size, 'axes.titlesize': fig_size, 'legend.fontsize': fig_size,
+          'xtick.labelsize': fig_size, 'ytick.labelsize': fig_size}
 matplotlib.rcParams.update(params)
-data = np.load('concentration_test/uncorrected_final.npy')
+data = np.load('concentration_test/uncorrected_rates_sog0.1_gog1_s0.1_g1.npy')
 #adjusted_data = np.load('boundary_condition_test/flat_test_first_order_boundary.npy')
 #data = data[data[:, 1].argsort()]
 #data2 = np.load('gamma_test2.npy')
@@ -74,11 +92,11 @@ rate_ax.set_xlabel(r'$\boldsymbol{r_1^{\text{\bf{max}}}}$')
 rate_ax.set_xticks([0, 1, 2,4,8,16])
 rate_ax.legend()
 '''
-
-fig, error_ax = plt.subplots()
-fig2, r1_flux_ax = plt.subplots()
-fig3, r2_flux_ax = plt.subplots()
-fig4, total_ax = plt.subplots()
+fig_size = (7, 4)
+fig, error_ax = plt.subplots(figsize=fig_size)
+fig2, r1_flux_ax = plt.subplots(figsize=fig_size)
+fig3, r2_flux_ax = plt.subplots(figsize=fig_size)
+fig4, total_ax = plt.subplots(figsize=fig_size)
 
 '''
 #*********************** sigma plotting ****************************
@@ -177,7 +195,8 @@ total_ax.ticklabel_format(axis='y', style='sci', scilimits=(-3,-3))
 error_ax.plot(concentrations, total_flux_rel_error, label='Total correction', linewidth=2, marker='o', markersize=10,
               color='black', linestyle='--')
 
-print(total_flux_rel_error)
+print(f'{total_flux_rel_error=}')
+print(f'{calculate_num_sims(total_flux, required_rate_pos(concentrations, 0.1, 1))=}')
 error_ax.ticklabel_format(axis='y')
 error_ax.set_ylabel(r'\bf{Relative error}')
 error_ax.set_xlabel(r'$\boldsymbol{c}$')
