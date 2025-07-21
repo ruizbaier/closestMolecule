@@ -289,9 +289,11 @@ if __name__ == '__main__':
     r2_max = [5]*len(c)
     R = r1_max
     # Diffusion coefficients.
-    D_BASE = 1
-    D1 = 2 * D_BASE
-    D2 = 1.5 * D_BASE
+    D_A = 1
+    D_B = 1
+    D_C = 5
+    D1 = D_A + D_B
+    D2 = D_C + 1 / (1 / D_A + 1 / D_B)
     # ********** Time constants ********* #
     dt = 0.1
     t_final = 0.1

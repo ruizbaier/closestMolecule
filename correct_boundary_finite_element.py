@@ -97,9 +97,11 @@ if __name__ == '__main__':
     r1_max = 5
     r2_max = 5
     # Diffusion coefficients.
-    D_BASE = 1
-    D1 = 2 * D_BASE
-    D2 = 1.5 * 5*D_BASE
+    D_A = 1
+    D_B = 1
+    D_C = 5
+    D1 = D_A + D_B
+    D2 = D_C + 1/(1/D_A + 1/D_B)
     # Time constants.
     dt = 0.1
     t_final = 0.1
@@ -107,8 +109,8 @@ if __name__ == '__main__':
     steady_state = True
     # Concentration of C molecules.
     c_vals = np.array([1,2,4,8])
-    sigma_init = 0.1
-    gamma_init = 1
+    sigma_init = 0.09867282
+    gamma_init = 1.20166547
     init_guess = np.array([sigma_init, gamma_init])
     # Exactly 0 can cause some issues.
     bounds = ([1e-10, 1e-10], [np.inf, np.inf])
@@ -116,7 +118,7 @@ if __name__ == '__main__':
     # Solves the optimisation problem.
     sol = least_squares(fun=finite_element_fluxes,
                         args=[sigma_orig, gamma_orig, c_vals, r1_max, mesh_folder, mesh_filename, t_final, dt, D1, D2, steady_state],
-                        x0=init_guess, jac=jacobian, method='trf', bounds=bounds, max_nfev=40,
+                        x0=init_guess, jac=jacobian, method='trf', bounds=bounds, max_nfev=25,
                         x_scale=[sigma_orig / 10, gamma_orig / 10])
     print('******************************************************************************')
     print(f'Elapsed time: {time.time() - start_time}')
