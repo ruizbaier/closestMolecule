@@ -1,0 +1,32 @@
+//load "msh3";
+load "medit";
+
+//cout << "ARGV.n = " << ARGV.n << endl;
+//for (int i = 0; i < ARGV.n; i++)
+  //cout << "ARGV[" << i << "] = '" << ARGV[i] << "'" << endl;
+
+real sigma = (ARGV.n > 0) ? atof(ARGV[2]) : 0.5;
+real gamma = (ARGV.n > 1) ? atof(ARGV[3]) : 100;
+cout << "sigma = " << sigma << endl;
+cout << "gamma = " << gamma << endl;
+
+real infx = 5; 
+real infy = 5;
+real fend = sigma*(exp(-4./3.*pi*gamma*infx^3));
+
+int right = 21, top=22, left = 23, bottom = 24;
+
+border b1(t=fend,infy){x=infx;y=t;label=right;};
+border b2(t=infx,0.){x=t;y=infy;label=top;};
+border b3(t=infy,sigma){x=0;y=t;label=left;};
+border b4(t=0,infx){x=t;y=sigma*(exp(-4./3.*pi*gamma*t^3));label=bottom;};
+
+
+int nps = 75;
+mesh Th=buildmesh(b1(nps)+b2(nps)+b3(nps)+b4(4*nps));
+
+//plot(Th);
+
+Th = adaptmesh(Th,region,iso=1,hmax=0.0275, hmin=0.01,keepbackvertices=0,nbsmooth=110,nbvx=110000);
+
+savemesh(Th,"meshes/exp_boundary_auto.mesh");

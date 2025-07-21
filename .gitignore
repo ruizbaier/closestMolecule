@@ -1,4 +1,7 @@
 # exclude everything
+corrections/particle_based
+corrections/particle_based_final
+corrections/FE_particle
 outputs/*
 meshes/*.xml
 meshes/*.msh
@@ -13,5 +16,6 @@ advection_diffusion_ellipse.py
 
 # exceptions to the rule
 !outputs/.gitkeep 
+!corrections/outputs/.gitkeep
 !meshes/exp_boundary_sigma0.1_gamma1.xml
 !meshes/exp_boundary_sigma0.1_gamma1_facet_region.xml

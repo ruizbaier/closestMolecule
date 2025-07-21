@@ -9,12 +9,9 @@ parameters["form_compiler"]["representation"] = "uflacs"
 parameters["form_compiler"]["cpp_optimize"] = True
 parameters["form_compiler"]["quadrature_degree"] = 4
 
+
 def exp_reaction_boundary(sigma, gamma, r2_val):
     return sigma*np.exp(-4/3*np.pi*gamma*np.power(r2_val, 3))
-
-
-def flat_reaction_boundary(r2_val):
-    return sigma
 
 
 def Gstar(p, q, c, r2):
@@ -28,9 +25,6 @@ def Gstar(p, q, c, r2):
 
 def div_rad(vec, r1, r2):
     return Dx(r2**2*vec[0],0)/r2**2 + Dx(r1**2*vec[1],1)/r1**2
-
-def G(p, q, r2):
-    return r2**2*p**2/(q+DOLFIN_EPS)
 
 
 class PInitial(UserExpression):
@@ -114,7 +108,7 @@ def solve_problem_instance(concentration, t_final, dt, mesh, bdry, sigma, gamma,
     mesh: Mesh
         The mesh over which the finite element is required.
     bdry: MeshFucntion
-        The mesh function that marks the boudnaries of 'mesh'.
+        The mesh function that marks the boundaries of 'mesh'.
     sigma: float
         The maximum height of the bottom/reaction boundary in the mesh. We assume here the boundary is
         ~ sigma*exp(-4*pi*gamma*r2^3/3).
@@ -286,9 +280,8 @@ if __name__ == '__main__':
     mesh_filenames = ["exp_boundary_sigma0.184_gamma2.73_r1max5_r2max5"]*len(c)
     # ******* Model constants ****** #
     # Sigma and gamma values must match the boundaries of the meshes in 'mesh_filenames'.
-    #sigma_adjustments = np.load('corrections.npy')
-    sigmas = [0.184]*len(c)
-    gammas = [2.73]*len(c)#np.arange(3.25, 5.25, 0.25)
+    sigmas = [0.1]*len(c)
+    gammas = [1]*len(c)#np.arange(3.25, 5.25, 0.25)
     mesh_folder = "meshes/"
     # Dimensions of the mesh
     r1_max = [5]*len(c)
