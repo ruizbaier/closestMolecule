@@ -74,7 +74,7 @@ Then we convert the produced .msh file to something readable in FEniCS (e.g. xml
 This also generates a file containing the boundary tag information.
 <img width="835" alt="Screenshot 2024-02-23 at 17 16 13" src="https://github.com/ruizbaier/closestMolecule/assets/29896148/410d0432-b913-4053-900c-501f909a650e">
 
-The mesh construction described above is handled automatically for each iteration of the boundary [see here](https://github.com/ruizbaier/closestMolecule/blob/main/correct_boundary_finite_element.py). This automation relies on [this file](https://github.com/ruizbaier/closestMolecule/blob/main/meshes/automated_exp_meshing.edp)
+The mesh construction described above is handled automatically for each iteration of the boundary when deriving corrections [see here](https://github.com/ruizbaier/closestMolecule/blob/main/correct_boundary_finite_element.py). This automation relies on [this file](https://github.com/ruizbaier/closestMolecule/blob/main/meshes/automated_exp_meshing.edp).
 # Finite element discretisation
 
 We simply use $\mathbb{P}\_1$ elements (piecewise linear and overall continuous) to approximate the solution. Essential (Dirichlet) boundary conditions are imposed in the trial space
